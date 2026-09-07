@@ -3,8 +3,50 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { styleText } from 'node:util';
+import { execSync, execFile } from 'node:child_process';
 import { loadState } from '../state.js';
 import { LOG_FILE } from '../paths.js';
+
+/**
+ * Returns SwiftBar plugin directory by checking defaults or standard paths.
+ * @returns {string}
+ */
+export function getSwiftBarPluginDir() {
+  try {
+    const customDir = execSync('defaults read com.ameba.SwiftBar PluginDirectory', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    if (customDir && fs.existsSync(customDir)) {
+      return customDir;
+    }
+  } catch {
+    // defaults read failed or key not set
+  }
+
+  const dotSwiftBar = path.join(os.homedir(), '.swiftbar');
+  if (fs.existsSync(dotSwiftBar)) {
+    return dotSwiftBar;
+  }
+
+  const swiftBarDirs = [
+    path.join(os.homedir(), 'Library/Application Support/SwiftBar/plugins'),
+    path.join(os.homedir(), 'Library/Application Support/SwiftBar')
+  ];
+
+  return swiftBarDirs.find(d => fs.existsSync(d)) || dotSwiftBar;
+}
+
+/**
+ * Triggers SwiftBar to immediately refresh all plugins.
+ */
+export function refreshSwiftBar() {
+  try {
+    execFile('open', ['-g', 'swiftbar://refreshallplugins'], () => {});
+  } catch {
+    // Ignore error if SwiftBar is not running or URL fails
+  }
+}
 
 /**
  * Formats relative time (e.g. "5dk önce", "2s önce").
@@ -47,11 +89,11 @@ export function generateMenubarOutput() {
 
   // Header Title in Menubar
   if (totalPending > 0) {
-    lines.push(`⇡${totalPending}`);
+    lines.push(`⚡ ⇡${totalPending}`);
   } else if (state.errors && state.errors.length > 0) {
-    lines.push('⚠️');
+    lines.push('⚠️ updeps');
   } else {
-    lines.push('⚡');
+    lines.push('⚡ updeps');
   }
   lines.push('---');
 
@@ -101,16 +143,15 @@ export function commandMenubar(args) {
   const currentFile = fileURLToPath(import.meta.url);
   const cliScript = path.resolve(path.dirname(currentFile), '../../bin/updeps.js');
 
-  const swiftBarDirs = [
-    path.join(os.homedir(), 'Library/Application Support/SwiftBar/plugins'),
-    path.join(os.homedir(), 'Library/Application Support/SwiftBar')
-  ];
-
-  let targetDir = swiftBarDirs.find(d => fs.existsSync(d));
-  if (!targetDir) {
-    targetDir = swiftBarDirs[0];
+  const targetDir = getSwiftBarPluginDir();
+  if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
+
+  // Ensure SwiftBar preference points to this directory
+  try {
+    execSync(`defaults write com.ameba.SwiftBar PluginDirectory -string "${targetDir}"`, { stdio: 'ignore' });
+  } catch {}
 
   const pluginPath = path.join(targetDir, 'sqaft-updeps.30s.sh');
   const scriptContent = `#!/bin/bash
@@ -120,5 +161,11 @@ ${process.execPath} "${cliScript}" menubar
   fs.writeFileSync(pluginPath, scriptContent, { mode: 0o755 });
   console.log(styleText('green', `✔ SwiftBar eklentisi kuruldu:`));
   console.log(`  ${pluginPath}`);
-  console.log('\nSwiftBar kuruluysa eklenti menü çubuğunuzda görünecektir.');
+
+  try {
+    execSync('open -a SwiftBar 2>/dev/null || true');
+    refreshSwiftBar();
+  } catch {}
+
+  console.log('\nSwiftBar menü çubuğunuzda aktif edildi.');
 }

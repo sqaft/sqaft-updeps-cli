@@ -6,6 +6,7 @@ import { acquireLock } from './lock.js';
 import { logger } from './logger.js';
 import { updateState } from './state.js';
 import { sendNotification } from './notify.js';
+import { refreshSwiftBar } from './commands/menubar.js';
 
 const execAsync = promisify(exec);
 
@@ -367,6 +368,8 @@ export async function runSourceRepo({ config, sourceRepo, triggerContext, dryRun
     message: notifMsg,
     enabled: config.notifications !== false
   });
+
+  refreshSwiftBar();
 
   logger.info(
     `[${sourceRepo.name}] Tamamlandı: ${committed} commit, ${unchanged} güncel, ${failed} hata, ${skipped} atlandı.`,

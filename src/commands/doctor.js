@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { execSync } from 'node:child_process';
 import { styleText } from 'node:util';
 import { CONFIG_FILE, LOCKS_DIR, LAUNCH_AGENT_PLIST } from '../paths.js';
 import { loadConfig } from '../config.js';
 import { getDaemonStatus } from '../daemon.js';
+import { getSwiftBarPluginDir } from './menubar.js';
 
 function isCommandInPath(cmd) {
   try {
@@ -128,6 +130,22 @@ export function commandDoctor() {
     console.log(styleText('green', '✔ osascript hazır (standart bildirimler aktif).'));
   } else {
     console.log(styleText('yellow', '⚠ Masaüstü bildirim aracı bulunamadı.'));
+  }
+
+  // 7. Menubar (SwiftBar)
+  const isSwiftBarInstalled = fs.existsSync('/Applications/SwiftBar.app') ||
+    fs.existsSync(path.join(os.homedir(), 'Applications/SwiftBar.app')) ||
+    isCommandInPath('swiftbar');
+  const swiftbarDir = getSwiftBarPluginDir();
+  const pluginFile = path.join(swiftbarDir, 'sqaft-updeps.30s.sh');
+  const isPluginInstalled = fs.existsSync(pluginFile);
+
+  if (isSwiftBarInstalled && isPluginInstalled) {
+    console.log(styleText('green', '✔ SwiftBar menü çubuğu eklentisi kurulu ve aktif.'));
+  } else if (isSwiftBarInstalled && !isPluginInstalled) {
+    console.log(styleText('yellow', '⚠ SwiftBar kurulu fakat eklenti yüklenmemiş ("updeps menubar --install" çalıştırın).'));
+  } else {
+    console.log(styleText('dim', 'ℹ Menü çubuğu: SwiftBar kurulu değil (İsteğe bağlı: "brew install --cask swiftbar && updeps menubar --install")'));
   }
 
   console.log('');
