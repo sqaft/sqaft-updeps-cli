@@ -136,8 +136,8 @@ export async function runTarget({ sourceRepo, pkg, triggerContext, dryRun = fals
   const targetLabel = pkg.name || path.basename(pkg.path);
   const targetPath = pkg.path;
 
-  // Filter by trigger type
-  if (triggerContext.trigger && pkg.triggers && !pkg.triggers.includes(triggerContext.trigger)) {
+  // Filter by trigger type (manual runs always proceed)
+  if (triggerContext.trigger && triggerContext.trigger !== 'manual' && pkg.triggers && !pkg.triggers.includes(triggerContext.trigger)) {
     return {
       status: 'skipped',
       target: targetLabel,
