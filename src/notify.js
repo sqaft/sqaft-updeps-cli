@@ -46,15 +46,14 @@ export function sendNotification({ type = 'ok', title, message, group, enabled =
 
   if (hasTerminalNotifier) {
     try {
+      const uniqueGroup = group || `sqaft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const args = [
         '-title', title,
         '-subtitle', subtitle,
         '-message', message,
-        '-sound', sound
+        '-sound', sound,
+        '-group', uniqueGroup
       ];
-      if (group) {
-        args.push('-group', group);
-      }
       execFile('terminal-notifier', args, () => {});
       return;
     } catch {
