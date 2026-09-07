@@ -15,6 +15,7 @@ import { commandStatus } from '../src/commands/status.js';
 import { commandDoctor } from '../src/commands/doctor.js';
 import { commandLogs } from '../src/commands/logs.js';
 import { commandMenubar, commandClearErrors } from '../src/commands/menubar.js';
+import { commandRetry } from '../src/commands/retry.js';
 import {
   runDaemonProcess,
   startLaunchDaemon,
@@ -48,6 +49,7 @@ ${styleText('bold', 'Komutlar:')}
   ${styleText('green', 'stop')}                            launchd servisini durdurur
   ${styleText('green', 'restart')}                         launchd servisini yeniden başlatır
   ${styleText('green', 'menubar [--install]')}             SwiftBar / xbar çıktısı üretir veya kurar
+  ${styleText('green', 'retry [id]')}                      Hatalı işlemleri tekrar başlatır
   ${styleText('green', 'clear-errors')}                    Menü çubuğundaki hata geçmişini temizler
 
 ${styleText('bold', 'Seçenekler:')}
@@ -126,6 +128,9 @@ async function main() {
         break;
       case 'clear-errors':
         commandClearErrors();
+        break;
+      case 'retry':
+        await commandRetry(cmdArgs);
         break;
       case 'start':
         console.log(styleText('cyan', 'LaunchAgent servisi başlatılıyor...'));

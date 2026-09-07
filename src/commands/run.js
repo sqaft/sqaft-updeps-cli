@@ -55,7 +55,8 @@ export async function commandRun(args) {
       sourceRepo,
       triggerContext,
       dryRun,
-      echo: true
+      echo: true,
+      targetFilter: args.target || args.t
     });
 
     console.log(

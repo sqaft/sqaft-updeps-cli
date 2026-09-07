@@ -347,10 +347,14 @@ export async function runTarget({ sourceRepo, pkg, triggerContext, dryRun = fals
  * @param {boolean} [params.echo=false]
  * @returns {Promise<{ committed: number, unchanged: number, failed: number, skipped: number, results: any[] }>}
  */
-export async function runSourceRepo({ config, sourceRepo, triggerContext, dryRun = false, echo = false }) {
-  const targets = sourceRepo.packages || [];
+export async function runSourceRepo({ config, sourceRepo, triggerContext, dryRun = false, echo = false, targetFilter = null }) {
+  let targets = sourceRepo.packages || [];
+  if (targetFilter) {
+    targets = targets.filter(p => (p.name || path.basename(p.path)) === targetFilter || p.path === targetFilter);
+  }
+
   if (targets.length === 0) {
-    logger.info(`[${sourceRepo.name}] Güncellenecek hedef bağımlılık tanımlanmamış.`, { echo });
+    logger.info(`[${sourceRepo.name}] Güncellenecek hedef bağımlılık bulunamadı${targetFilter ? ` (${targetFilter})` : ''}.`, { echo });
     return { committed: 0, unchanged: 0, failed: 0, skipped: 0, results: [] };
   }
 

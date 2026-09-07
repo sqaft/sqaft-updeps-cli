@@ -112,19 +112,26 @@ export function generateMenubarOutput() {
 
   // 3. Failed Operations
   if (errors.length > 0) {
+    const currentFile = fileURLToPath(import.meta.url);
+    const cliScript = path.resolve(path.dirname(currentFile), '../../bin/updeps.js');
+
     lines.push(`Hata Veren İşlemler (${errors.length}) | font=bold color=red`);
     for (const err of errors) {
       const timeStr = formatTimeAgo(err.timestamp);
       const safeMsg = (err.message || '').replace(/[\r\n]+/g, ' ').replace(/\|/g, '-').trim();
       lines.push(`⚠️ ${err.sourceRepo} → ${err.target} · ${timeStr} | color=red font=bold`);
+      lines.push(`-- ↻ Tekrar Başlat | bash="${process.execPath}" param1="${cliScript}" param2="retry" param3="${err.id}" terminal=false refresh=true`);
       lines.push(`-- Hata: ${safeMsg} | font=monospace`);
       if (err.targetPath) {
         lines.push(`-- Hedef Klasörü Aç | bash=open param1="${err.targetPath}" terminal=false`);
       }
     }
     lines.push('---');
-    const currentFile = fileURLToPath(import.meta.url);
-    const cliScript = path.resolve(path.dirname(currentFile), '../../bin/updeps.js');
+    if (errors.length > 1) {
+      lines.push(`↻ Tüm Hataları Tekrar Başlat (${errors.length}) | bash="${process.execPath}" param1="${cliScript}" param2="retry" terminal=false refresh=true`);
+    } else {
+      lines.push(`↻ Tekrar Başlat | bash="${process.execPath}" param1="${cliScript}" param2="retry" terminal=false refresh=true`);
+    }
     lines.push(`Hataları Temizle | bash="${process.execPath}" param1="${cliScript}" param2="clear-errors" terminal=false refresh=true`);
     lines.push('---');
   }

@@ -101,6 +101,8 @@ describe('Menubar Output & Error Management', () => {
     assert.ok(output.includes('Hata Veren İşlemler (1)'));
     assert.ok(output.includes('src1 → tgt1'));
     assert.ok(output.includes('npm update failed with exit code 1'));
+    assert.ok(output.includes('Tekrar Başlat'));
+    assert.ok(output.includes('retry'));
     assert.ok(output.includes('Hataları Temizle'));
   });
 
@@ -131,6 +133,7 @@ describe('Menubar Output & Error Management', () => {
     const output = generateMenubarOutput();
     assert.ok(output.includes('⚠️ 2 hata'));
     assert.ok(output.includes('Hata Veren İşlemler (2)'));
+    assert.ok(output.includes('Tüm Hataları Tekrar Başlat (2)'));
   });
 
   it('displays both running operations and errors when both exist', () => {
