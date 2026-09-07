@@ -109,6 +109,7 @@ export async function runDaemonProcess() {
     s.daemon.pid = process.pid;
     s.daemon.startedAt = Date.now();
     s.daemon.monitoredCount = config.repos.length;
+    s.activeRuns = [];
     return s;
   });
 
@@ -125,6 +126,7 @@ export async function runDaemonProcess() {
     updateState(s => {
       s.daemon.running = false;
       s.daemon.pid = null;
+      s.activeRuns = [];
       return s;
     });
 

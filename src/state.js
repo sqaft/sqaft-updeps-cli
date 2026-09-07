@@ -12,6 +12,7 @@ export function getDefaultState() {
       monitoredCount: 0,
       running: false
     },
+    activeRuns: [],
     errors: []
   };
 }
@@ -34,6 +35,7 @@ export function loadState() {
       repos: parsed.repos || {},
       lastRuns: parsed.lastRuns || [],
       daemon: { ...getDefaultState().daemon, ...(parsed.daemon || {}) },
+      activeRuns: parsed.activeRuns || [],
       errors: parsed.errors || []
     };
   } catch {

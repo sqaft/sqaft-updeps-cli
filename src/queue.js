@@ -11,6 +11,7 @@ export class UpdateQueue {
     this.timers = new Map();
     this.pendingEvents = new Map();
     this.runningRepos = new Set();
+    this.readyQueue = [];
   }
 
   /**
@@ -19,6 +20,7 @@ export class UpdateQueue {
    */
   updateConfig(newConfig) {
     this.config = newConfig;
+    this.drain();
   }
 
   /**
@@ -53,10 +55,32 @@ export class UpdateQueue {
 
     const timer = setTimeout(() => {
       this.timers.delete(repoPath);
-      this.process(repoPath);
+      if (!this.readyQueue.includes(repoPath)) {
+        this.readyQueue.push(repoPath);
+      }
+      this.drain();
     }, debounceMs);
 
     this.timers.set(repoPath, timer);
+  }
+
+  /**
+   * Drains the ready queue respecting globalMaxConcurrent limit.
+   */
+  drain() {
+    const globalMaxConcurrent = this.config.defaults?.globalMaxConcurrent ?? 3;
+
+    while (this.runningRepos.size < globalMaxConcurrent && this.readyQueue.length > 0) {
+      // Find the first repo in readyQueue that is not currently running
+      const nextIndex = this.readyQueue.findIndex(r => !this.runningRepos.has(r));
+      if (nextIndex === -1) {
+        // All ready repos are currently running, wait for one to finish
+        break;
+      }
+
+      const [repoPath] = this.readyQueue.splice(nextIndex, 1);
+      this.process(repoPath);
+    }
   }
 
   /**
@@ -64,12 +88,6 @@ export class UpdateQueue {
    * @param {string} repoPath
    */
   async process(repoPath) {
-    if (this.runningRepos.has(repoPath)) {
-      // If already running, re-schedule after short delay
-      setTimeout(() => this.process(repoPath), 1000);
-      return;
-    }
-
     const item = this.pendingEvents.get(repoPath);
     if (!item) return;
     this.pendingEvents.delete(repoPath);
@@ -87,6 +105,13 @@ export class UpdateQueue {
       logger.error(`[${item.sourceRepo.name}] Çalıştırma hatası: ${err.message}`);
     } finally {
       this.runningRepos.delete(repoPath);
+
+      // If new event arrived while running, requeue it
+      if (this.pendingEvents.has(repoPath) && !this.readyQueue.includes(repoPath)) {
+        this.readyQueue.push(repoPath);
+      }
+
+      this.drain();
     }
   }
 }

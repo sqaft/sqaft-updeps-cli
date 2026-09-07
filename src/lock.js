@@ -3,6 +3,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { LOCKS_DIR } from './paths.js';
 
+import { logger } from './logger.js';
+
 /**
  * Returns a filesystem-safe hash for a given repo path.
  * @param {string} repoPath
@@ -16,16 +18,19 @@ export function getLockDirName(repoPath) {
 
 /**
  * Tries to acquire an atomic lock using mkdir for a given repo path.
- * Retries every second until timeout.
+ * Retries every second until acquired or until waitTimeoutSec (if > 0).
+ * waitTimeoutSec = 0 means wait indefinitely (no timeout).
  * @param {string} repoPath
  * @param {object} options
  * @param {number} [options.staleLockSec=900]
- * @param {number} [options.waitTimeoutSec=60]
+ * @param {number} [options.waitTimeoutSec=0]
  * @returns {Promise<{ lockPath: string, release: () => void }>}
  */
 export async function acquireLock(repoPath, options = {}) {
-  const staleLockSec = options.staleLockSec || 900;
-  const waitTimeoutSec = options.waitTimeoutSec || 60;
+  const staleLockSec = options.staleLockSec ?? 900;
+  const waitTimeoutSec = options.waitTimeoutSec !== undefined && options.waitTimeoutSec !== null
+    ? options.waitTimeoutSec
+    : 0;
 
   if (!fs.existsSync(LOCKS_DIR)) {
     fs.mkdirSync(LOCKS_DIR, { recursive: true });
@@ -82,10 +87,15 @@ export async function acquireLock(repoPath, options = {}) {
       }
 
       const elapsedSec = (Date.now() - startTime) / 1000;
-      if (elapsedSec >= waitTimeoutSec) {
+      if (waitTimeoutSec > 0 && elapsedSec >= waitTimeoutSec) {
         throw new Error(
           `Kilit alınamadı (zaman aşımı: ${waitTimeoutSec}s): ${repoPath}\nKilit konumu: ${lockPath}`
         );
+      }
+
+      // Log progress periodically every 15 seconds so logs show it's alive and waiting
+      if (Math.floor(elapsedSec) > 0 && Math.floor(elapsedSec) % 15 === 0) {
+        logger.info(`[Kilit] Repo için kilit bekleniyor (${Math.floor(elapsedSec)}s): ${repoPath}`);
       }
 
       // Wait 1 second before retrying

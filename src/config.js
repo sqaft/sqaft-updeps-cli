@@ -9,7 +9,9 @@ export const DEFAULT_CONFIG_VALUES = {
   commandTimeout: 300,
   debounceMs: 3000,
   maxConcurrent: 3,
+  globalMaxConcurrent: 3,
   staleLockSec: 900,
+  waitTimeoutSec: 0,
   push: false
 };
 
@@ -50,8 +52,14 @@ export function validateConfig(raw) {
     if (d.maxConcurrent !== undefined && (typeof d.maxConcurrent !== 'number' || d.maxConcurrent <= 0)) {
       throw new Error('"defaults.maxConcurrent" pozitif bir sayı olmalıdır.');
     }
+    if (d.globalMaxConcurrent !== undefined && (typeof d.globalMaxConcurrent !== 'number' || d.globalMaxConcurrent <= 0)) {
+      throw new Error('"defaults.globalMaxConcurrent" pozitif bir sayı olmalıdır.');
+    }
     if (d.staleLockSec !== undefined && (typeof d.staleLockSec !== 'number' || d.staleLockSec <= 0)) {
       throw new Error('"defaults.staleLockSec" pozitif bir sayı olmalıdır.');
+    }
+    if (d.waitTimeoutSec !== undefined && (typeof d.waitTimeoutSec !== 'number' || d.waitTimeoutSec < 0)) {
+      throw new Error('"defaults.waitTimeoutSec" 0 veya pozitif bir sayı olmalıdır.');
     }
     if (d.push !== undefined && typeof d.push !== 'boolean') {
       throw new Error('"defaults.push" boolean (true/false) olmalıdır.');
@@ -107,6 +115,12 @@ export function validateConfig(raw) {
           if (pkg.commandTimeout !== undefined && (typeof pkg.commandTimeout !== 'number' || pkg.commandTimeout <= 0)) {
             throw new Error(`repos[${rIndex}].packages[${pIndex}].commandTimeout pozitif bir sayı olmalıdır.`);
           }
+          if (pkg.staleLockSec !== undefined && (typeof pkg.staleLockSec !== 'number' || pkg.staleLockSec <= 0)) {
+            throw new Error(`repos[${rIndex}].packages[${pIndex}].staleLockSec pozitif bir sayı olmalıdır.`);
+          }
+          if (pkg.waitTimeoutSec !== undefined && (typeof pkg.waitTimeoutSec !== 'number' || pkg.waitTimeoutSec < 0)) {
+            throw new Error(`repos[${rIndex}].packages[${pIndex}].waitTimeoutSec 0 veya pozitif bir sayı olmalıdır.`);
+          }
         });
       }
     });
@@ -145,7 +159,9 @@ export function resolveConfig(raw) {
         commands: pkg.commands ? [...pkg.commands] : [...defaults.commands],
         commitMessage: pkg.commitMessage !== undefined ? pkg.commitMessage : defaults.commitMessage,
         push: pkg.push !== undefined ? Boolean(pkg.push) : Boolean(defaults.push),
-        commandTimeout: pkg.commandTimeout !== undefined ? pkg.commandTimeout : defaults.commandTimeout
+        commandTimeout: pkg.commandTimeout !== undefined ? pkg.commandTimeout : defaults.commandTimeout,
+        staleLockSec: pkg.staleLockSec !== undefined ? pkg.staleLockSec : defaults.staleLockSec,
+        waitTimeoutSec: pkg.waitTimeoutSec !== undefined ? pkg.waitTimeoutSec : defaults.waitTimeoutSec
       };
     });
 
@@ -229,7 +245,9 @@ export function createDefaultConfig() {
       commandTimeout: 300,
       debounceMs: 3000,
       maxConcurrent: 3,
+      globalMaxConcurrent: 3,
       staleLockSec: 900,
+      waitTimeoutSec: 0,
       push: false
     },
     notifications: true

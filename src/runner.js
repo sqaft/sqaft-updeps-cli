@@ -157,43 +157,84 @@ export async function runTarget({ sourceRepo, pkg, triggerContext, dryRun = fals
     }
   }
 
-  // Pre-checks
-  const preCheck = checkGitPreconditions(targetPath);
-  if (!preCheck.ok) {
-    logger.warn(`[${targetLabel}] ${preCheck.reason}`, { echo });
-    return {
-      status: 'skipped',
-      target: targetLabel,
-      message: preCheck.reason
-    };
-  }
+  const runId = `${sourceRepo.name}->${targetLabel}`;
+  const errorId = `${sourceRepo.name}->${targetLabel}`;
 
-  const activeBranch = getActiveBranch(targetPath);
-  const vars = {
-    pkg: sourceRepo.name,
-    pkgs: sourceRepo.name,
-    sha: triggerContext.sha || '',
-    sourcePath: sourceRepo.path,
-    targetPath: pkg.path,
-    sourceBranch: triggerContext.branch || '',
-    targetBranch: activeBranch
+  const finish = (result) => {
+    updateState(state => {
+      if (result.status === 'failed') {
+        state.errors = (state.errors || []).filter(e => e.id !== errorId);
+        state.errors.unshift({
+          id: errorId,
+          sourceRepo: sourceRepo.name,
+          target: targetLabel,
+          targetPath,
+          message: result.message,
+          timestamp: Date.now()
+        });
+        state.errors = state.errors.slice(0, 20);
+      } else if (result.status === 'committed' || result.status === 'unchanged') {
+        state.errors = (state.errors || []).filter(e => e.id !== errorId);
+      }
+      return state;
+    });
+    return result;
   };
-  vars.bumps = `${vars.pkg}@${(vars.sha || '').slice(0, 7)}`;
+
+  // Register active run
+  updateState(state => {
+    state.activeRuns = (state.activeRuns || []).filter(r => r.id !== runId);
+    state.activeRuns.push({
+      id: runId,
+      sourceRepo: sourceRepo.name,
+      target: targetLabel,
+      targetPath,
+      startedAt: Date.now()
+    });
+    return state;
+  });
+  refreshSwiftBar();
 
   // Acquire lock
   let lock;
   try {
-    lock = await acquireLock(targetPath, { staleLockSec: pkg.staleLockSec || 900 });
+    lock = await acquireLock(targetPath, {
+      staleLockSec: pkg.staleLockSec ?? 900,
+      waitTimeoutSec: pkg.waitTimeoutSec !== undefined ? pkg.waitTimeoutSec : 0
+    });
   } catch (err) {
     logger.error(`[${targetLabel}] ${err.message}`, { echo });
-    return {
+    return finish({
       status: 'failed',
       target: targetLabel,
       message: err.message
-    };
+    });
   }
 
   try {
+    // Pre-checks (performed under lock to ensure stable git state)
+    const preCheck = checkGitPreconditions(targetPath);
+    if (!preCheck.ok) {
+      logger.warn(`[${targetLabel}] ${preCheck.reason}`, { echo });
+      return finish({
+        status: 'skipped',
+        target: targetLabel,
+        message: preCheck.reason
+      });
+    }
+
+    const activeBranch = getActiveBranch(targetPath);
+    const vars = {
+      pkg: sourceRepo.name,
+      pkgs: sourceRepo.name,
+      sha: triggerContext.sha || '',
+      sourcePath: sourceRepo.path,
+      targetPath: pkg.path,
+      sourceBranch: triggerContext.branch || '',
+      targetBranch: activeBranch
+    };
+    vars.bumps = `${vars.pkg}@${(vars.sha || '').slice(0, 7)}`;
+
     logger.info(`[${targetLabel}] Güncelleme komutları çalıştırılıyor...`, { echo });
 
     // Run commands sequentially
@@ -209,13 +250,14 @@ export async function runTarget({ sourceRepo, pkg, triggerContext, dryRun = fals
           env: { ...process.env, CI: '1' }
         });
       } catch (cmdErr) {
-        logger.error(`[${targetLabel}] Komut başarısız: "${cmd}" -> ${cmdErr.message}`, { echo });
+        const errorMsg = `Komut hatası (${cmd}): ${cmdErr.message}`;
+        logger.error(`[${targetLabel}] ${errorMsg}`, { echo });
         rollbackWorkingTree(targetPath);
-        return {
+        return finish({
           status: 'failed',
           target: targetLabel,
-          message: `Komut hatası: ${cmd}`
-        };
+          message: errorMsg
+        });
       }
     }
 
@@ -223,11 +265,11 @@ export async function runTarget({ sourceRepo, pkg, triggerContext, dryRun = fals
     const porcelain = execSync('git status --porcelain', { cwd: targetPath, encoding: 'utf8' }).trim();
     if (porcelain.length === 0) {
       logger.info(`[${targetLabel}] Değişiklik yok (güncel).`, { echo });
-      return {
+      return finish({
         status: 'unchanged',
         target: targetLabel,
         message: 'Değişiklik yok'
-      };
+      });
     }
 
     // Changes detected
@@ -237,11 +279,11 @@ export async function runTarget({ sourceRepo, pkg, triggerContext, dryRun = fals
       const diffStat = execSync('git diff --stat', { cwd: targetPath, encoding: 'utf8' }).trim();
       logger.info(`[${targetLabel}] [DRY-RUN] Değişiklikler commit edilmeyecek:\n${diffStat}`, { echo });
       rollbackWorkingTree(targetPath);
-      return {
+      return finish({
         status: 'committed',
         target: targetLabel,
         message: `[dry-run] -> ${commitMsg}`
-      };
+      });
     }
 
     // Stage changes and commit
@@ -257,11 +299,11 @@ export async function runTarget({ sourceRepo, pkg, triggerContext, dryRun = fals
         logger.info(`[${targetLabel}] Push başarılı.`, { echo });
       } catch (pushErr) {
         logger.error(`[${targetLabel}] Push başarısız: ${pushErr.message}`, { echo });
-        return {
+        return finish({
           status: 'failed',
           target: targetLabel,
           message: `Commit atıldı ancak push başarısız oldu: ${pushErr.message}`
-        };
+        });
       }
     }
 
@@ -277,15 +319,20 @@ export async function runTarget({ sourceRepo, pkg, triggerContext, dryRun = fals
       return state;
     });
 
-    return {
+    return finish({
       status: 'committed',
       target: targetLabel,
       message: commitMsg
-    };
+    });
   } finally {
     if (lock) {
       lock.release();
     }
+    updateState(state => {
+      state.activeRuns = (state.activeRuns || []).filter(r => r.id !== runId);
+      return state;
+    });
+    refreshSwiftBar();
   }
 }
 

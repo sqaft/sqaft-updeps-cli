@@ -6,6 +6,8 @@ import os from 'node:os';
 import { execSync } from 'node:child_process';
 import { runTarget, checkGitPreconditions, rollbackWorkingTree } from '../src/runner.js';
 
+import { updateState } from '../src/state.js';
+
 describe('Runner Pipeline', () => {
   const testDir = path.join(os.tmpdir(), `sqaft-runner-test-${Date.now()}`);
   const targetDir = path.join(testDir, 'target-client');
@@ -28,6 +30,10 @@ describe('Runner Pipeline', () => {
     try {
       fs.rmSync(testDir, { recursive: true, force: true });
     } catch {}
+    updateState(s => {
+      s.errors = (s.errors || []).filter(e => !e.id.includes('target-client'));
+      return s;
+    });
   });
 
   it('verifies preconditions for clean git repo', () => {

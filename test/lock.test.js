@@ -44,4 +44,39 @@ describe('Lock Mechanism', () => {
     assert.ok(fs.existsSync(lock.lockPath));
     lock.release();
   });
+
+  it('throws timeout error when waitTimeoutSec is positive and lock held', async () => {
+    const fakeRepo = path.join(os.tmpdir(), `sqaft-timeout-repo-${Date.now()}`);
+    const lock1 = await acquireLock(fakeRepo);
+
+    await assert.rejects(
+      () => acquireLock(fakeRepo, { waitTimeoutSec: 1 }),
+      /Kilit alınamadı \(zaman aşımı: 1s\)/
+    );
+
+    lock1.release();
+  });
+
+  it('waits and acquires lock when released by previous holder with waitTimeoutSec: 0', async () => {
+    const fakeRepo = path.join(os.tmpdir(), `sqaft-wait-repo-${Date.now()}`);
+    const lock1 = await acquireLock(fakeRepo);
+
+    let acquired2 = false;
+    const promise2 = acquireLock(fakeRepo, { waitTimeoutSec: 0 }).then(l => {
+      acquired2 = true;
+      return l;
+    });
+
+    // Before release, lock2 should not have acquired
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(acquired2, false);
+
+    // Release lock1
+    lock1.release();
+
+    const lock2 = await promise2;
+    assert.equal(acquired2, true);
+    assert.ok(lock2);
+    lock2.release();
+  });
 });

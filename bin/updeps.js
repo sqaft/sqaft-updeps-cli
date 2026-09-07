@@ -14,7 +14,7 @@ import { commandRun } from '../src/commands/run.js';
 import { commandStatus } from '../src/commands/status.js';
 import { commandDoctor } from '../src/commands/doctor.js';
 import { commandLogs } from '../src/commands/logs.js';
-import { commandMenubar } from '../src/commands/menubar.js';
+import { commandMenubar, commandClearErrors } from '../src/commands/menubar.js';
 import {
   runDaemonProcess,
   startLaunchDaemon,
@@ -48,6 +48,7 @@ ${styleText('bold', 'Komutlar:')}
   ${styleText('green', 'stop')}                            launchd servisini durdurur
   ${styleText('green', 'restart')}                         launchd servisini yeniden başlatır
   ${styleText('green', 'menubar [--install]')}             SwiftBar / xbar çıktısı üretir veya kurar
+  ${styleText('green', 'clear-errors')}                    Menü çubuğundaki hata geçmişini temizler
 
 ${styleText('bold', 'Seçenekler:')}
   -h, --help               Yardım mesajını gösterir
@@ -122,6 +123,9 @@ async function main() {
         break;
       case 'menubar':
         commandMenubar(cmdArgs);
+        break;
+      case 'clear-errors':
+        commandClearErrors();
         break;
       case 'start':
         console.log(styleText('cyan', 'LaunchAgent servisi başlatılıyor...'));

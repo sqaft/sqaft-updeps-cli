@@ -4,7 +4,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { styleText } from 'node:util';
 import { execSync, execFile } from 'node:child_process';
-import { loadState } from '../state.js';
+import { loadState, updateState } from '../state.js';
 import { LOG_FILE } from '../paths.js';
 
 /**
@@ -65,77 +65,93 @@ function formatTimeAgo(timestamp) {
 
 /**
  * Generates SwiftBar/xbar menubar output based solely on state.json.
+ * Only displays currently running operations and failed operations.
+ * If idle and no errors exist, returns empty string so SwiftBar hides the item.
+ * @returns {string}
  */
 export function generateMenubarOutput() {
   const state = loadState();
+  const activeRuns = state.activeRuns || [];
+  const errors = state.errors || [];
+
+  // If no operations are currently running and no errors exist, return empty
+  if (activeRuns.length === 0 && errors.length === 0) {
+    return '';
+  }
+
   const lines = [];
 
-  // Calculate pending pushes
-  let totalPending = 0;
-  const pendingItems = [];
-
-  for (const [repoPath, repoInfo] of Object.entries(state.repos || {})) {
-    const count = repoInfo.pendingPushCount || 0;
-    if (count > 0) {
-      totalPending += count;
-      pendingItems.push({
-        name: path.basename(repoPath),
-        path: repoPath,
-        count,
-        time: repoInfo.lastProcessedAt
-      });
+  // 1. Header Title in Menubar
+  if (activeRuns.length > 0 && errors.length > 0) {
+    lines.push(`🔄 ${activeRuns.length} çalışıyor · ⚠️ ${errors.length} hata`);
+  } else if (activeRuns.length > 0) {
+    if (activeRuns.length === 1) {
+      lines.push(`🔄 ${activeRuns[0].target}`);
+    } else {
+      lines.push(`🔄 ${activeRuns.length} işlem çalışıyor`);
+    }
+  } else if (errors.length > 0) {
+    if (errors.length === 1) {
+      lines.push(`⚠️ ${errors[0].target} hata`);
+    } else {
+      lines.push(`⚠️ ${errors.length} hata`);
     }
   }
 
-  // Header Title in Menubar
-  if (totalPending > 0) {
-    lines.push(`⚡ ⇡${totalPending}`);
-  } else if (state.errors && state.errors.length > 0) {
-    lines.push('⚠️ updeps');
-  } else {
-    lines.push('⚡ updeps');
-  }
   lines.push('---');
 
-  // Pending Pushes section
-  if (pendingItems.length > 0) {
-    lines.push(`Push bekleyen (${totalPending}) | font=bold`);
-    for (const item of pendingItems) {
-      const timeStr = item.time ? ` · ${formatTimeAgo(item.time)}` : '';
-      lines.push(`  ${item.name} · ${item.count} commit${timeStr} | bash=open param1="${item.path}" terminal=false`);
+  // 2. Currently Running Operations
+  if (activeRuns.length > 0) {
+    lines.push(`Çalışan İşlemler (${activeRuns.length}) | font=bold`);
+    for (const run of activeRuns) {
+      const timeStr = formatTimeAgo(run.startedAt);
+      lines.push(`🔄 ${run.sourceRepo} → ${run.target} (${timeStr}) | bash=open param1="${run.targetPath}" terminal=false`);
     }
     lines.push('---');
   }
 
-  // Last run summary
-  const lastRun = state.lastRuns?.[0];
-  if (lastRun) {
-    lines.push(`Son çalışma: ${lastRun.sourceRepo} | font=bold`);
-    const dateStr = new Date(lastRun.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    lines.push(`  ${lastRun.committed} commit, ${lastRun.unchanged} güncel, ${lastRun.failed} hata · ${dateStr}`);
+  // 3. Failed Operations
+  if (errors.length > 0) {
+    lines.push(`Hata Veren İşlemler (${errors.length}) | font=bold color=red`);
+    for (const err of errors) {
+      const timeStr = formatTimeAgo(err.timestamp);
+      const safeMsg = (err.message || '').replace(/[\r\n]+/g, ' ').replace(/\|/g, '-').trim();
+      lines.push(`⚠️ ${err.sourceRepo} → ${err.target} · ${timeStr} | color=red font=bold`);
+      lines.push(`-- Hata: ${safeMsg} | font=monospace`);
+      if (err.targetPath) {
+        lines.push(`-- Hedef Klasörü Aç | bash=open param1="${err.targetPath}" terminal=false`);
+      }
+    }
+    lines.push('---');
+    const currentFile = fileURLToPath(import.meta.url);
+    const cliScript = path.resolve(path.dirname(currentFile), '../../bin/updeps.js');
+    lines.push(`Hataları Temizle | bash="${process.execPath}" param1="${cliScript}" param2="clear-errors" terminal=false refresh=true`);
     lines.push('---');
   }
 
-  // Actions
+  // 4. Quick Action
   lines.push(`Log dosyasını aç | bash=open param1="${LOG_FILE}" terminal=false`);
-  lines.push('---');
-
-  // Daemon state
-  const daemon = state.daemon || {};
-  if (daemon.running) {
-    lines.push(`Daemon: çalışıyor (${daemon.monitoredCount || 0} repo) | color=green`);
-  } else {
-    lines.push('Daemon: çalışmıyor | color=orange');
-  }
 
   return lines.join('\n');
+}
+
+export function commandClearErrors() {
+  updateState(state => {
+    state.errors = [];
+    return state;
+  });
+  refreshSwiftBar();
+  console.log(styleText('green', '✔ Hata geçmişi temizlendi.'));
 }
 
 export function commandMenubar(args) {
   const install = Boolean(args.install);
 
   if (!install) {
-    console.log(generateMenubarOutput());
+    const output = generateMenubarOutput();
+    if (output) {
+      process.stdout.write(output + '\n');
+    }
     return;
   }
 

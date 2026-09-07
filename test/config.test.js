@@ -89,5 +89,32 @@ describe('Config Validation & Resolution', () => {
     assert.throws(() => validateConfig({ repos: [{}] }), /path zorunludur/);
     assert.throws(() => validateConfig({ defaults: { push: 'yes' } }), /boolean/);
     assert.throws(() => validateConfig({ defaults: { commandTimeout: -10 } }), /pozitif bir sayı/);
+    assert.throws(() => validateConfig({ defaults: { globalMaxConcurrent: 0 } }), /pozitif bir sayı/);
+    assert.throws(() => validateConfig({ defaults: { waitTimeoutSec: -5 } }), /0 veya pozitif bir sayı/);
+    assert.throws(() => validateConfig({ repos: [{ path: '/tmp/r', packages: [{ path: '/tmp/p', waitTimeoutSec: -1 }] }] }), /0 veya pozitif bir sayı/);
+  });
+
+  it('resolves waitTimeoutSec and globalMaxConcurrent properly', () => {
+    const raw = {
+      repos: [
+        {
+          path: '/tmp/repo-1',
+          packages: [
+            { path: '/tmp/pkg-default' },
+            { path: '/tmp/pkg-custom', waitTimeoutSec: 120 }
+          ]
+        }
+      ],
+      defaults: {
+        globalMaxConcurrent: 5,
+        waitTimeoutSec: 0
+      }
+    };
+
+    const resolved = resolveConfig(raw);
+    assert.equal(resolved.defaults.globalMaxConcurrent, 5);
+    assert.equal(resolved.defaults.waitTimeoutSec, 0);
+    assert.equal(resolved.repos[0].packages[0].waitTimeoutSec, 0);
+    assert.equal(resolved.repos[0].packages[1].waitTimeoutSec, 120);
   });
 });
