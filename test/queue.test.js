@@ -140,6 +140,26 @@ test('coalesce:false ile ortak hedef iki kez çalışır', async () => {
   assert.equal(targetsRun.filter((n) => n === 'one').length, 2);
 });
 
+test('kuyruktaki işler state.queue.jobs\'ta görünür ve işlendikçe düşer', async () => {
+  const { loadState } = await import('../src/state.js');
+  const cfg = makeConfig();
+  const seen = [];
+  const runner = async ({ target }) => {
+    seen.push(loadState().queue.jobs.map((j) => j.target).sort());
+    await sleep(20);
+    return { status: 'committed', target: target.name, message: '' };
+  };
+  const q = new UpdateQueue(cfg, { runner });
+  q.enqueue(cfg.repos[0], { trigger: 'push', branch: 'main', sha: 'a1' }); // -> one, two
+
+  while (!q.idle) await sleep(10);
+
+  // while the first target ran, the other was still queued; by the last it was empty
+  assert.deepEqual(seen[0], ['two']);
+  assert.deepEqual(seen[1], []);
+  assert.deepEqual(loadState().queue, { pending: 0, jobs: [] });
+});
+
 test('grup bittiğinde onGroupDone bir kez çağrılır', async () => {
   const cfg = makeConfig();
   const groups = [];

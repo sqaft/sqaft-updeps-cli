@@ -10,8 +10,7 @@ import {
   diffSnapshots,
   selectiveCommit,
   safeRollback,
-  activeBranch,
-  unpushedCount
+  activeBranch
 } from './gitops.js';
 import { updateState } from './state.js';
 import { appendEvent } from './journal.js';
@@ -250,7 +249,6 @@ export async function runTarget({ config, target, trigger, group, dryRun = false
         lastUpdatedFrom: source,
         lastUpdatedSha: (trigger.sha || '').slice(0, 12),
         lastUpdatedAt: Date.now(),
-        pendingPushCount: unpushedCount(target.path),
         lastCommitMessage: commitMsg
       };
       return state;

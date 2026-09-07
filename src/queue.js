@@ -143,6 +143,7 @@ export class UpdateQueue {
   }
 
   _drain() {
+    this._writeQueueDepth();
     if (this.processing) return;
     const job = this.ready.find((j) => !this.runningTargets.has(j.targetPath));
     if (!job) return;
@@ -161,8 +162,13 @@ export class UpdateQueue {
 
   _writeQueueDepth() {
     try {
+      const jobs = this.ready.map((j) => ({
+        target: j.target.name,
+        targetPath: j.targetPath,
+        sources: [...j.sources.values()].map((s) => s.name)
+      }));
       updateState((state) => {
-        state.queue = { pending: this.ready.length };
+        state.queue = { pending: jobs.length, jobs };
         return state;
       });
     } catch {

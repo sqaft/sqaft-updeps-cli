@@ -15,6 +15,40 @@ export function lockNameFor(repoPath) {
   return `${base}-${hash}.lock`;
 }
 
+/** Lock dirs this process currently holds — released on daemon shutdown. */
+const heldLocks = new Set();
+
+/**
+ * True if a pid belongs to a live process on this machine. Locks only ever
+ * live under a local state dir, so a same-host check is always valid.
+ * @param {number} pid
+ * @returns {boolean}
+ */
+function pidAlive(pid) {
+  if (!pid || pid === process.pid) return pid === process.pid;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM'; // exists but owned by another user
+  }
+}
+
+/**
+ * Best-effort removal of every lock this process still holds. Called from the
+ * daemon's signal handlers so a restart doesn't strand a lock for `staleLockSec`.
+ */
+export function releaseHeldLocks() {
+  for (const lockPath of heldLocks) {
+    try {
+      fs.rmSync(lockPath, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+  heldLocks.clear();
+}
+
 /**
  * Acquires an atomic lock for a repo path using mkdir (no flock on macOS).
  * Retries once per second. A lock whose mtime is older than staleLockSec is
@@ -42,12 +76,14 @@ export async function acquireLock(repoPath, options = {}) {
         JSON.stringify({ pid: process.pid, repoPath, acquiredAt: Date.now() }, null, 2),
         'utf8'
       );
+      heldLocks.add(lockPath);
       let released = false;
       return {
         lockPath,
         release() {
           if (released) return;
           released = true;
+          heldLocks.delete(lockPath);
           try {
             fs.rmSync(lockPath, { recursive: true, force: true });
           } catch {
@@ -57,6 +93,19 @@ export async function acquireLock(repoPath, options = {}) {
       };
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
+
+      // Owner-dead check: a lock whose creating process is gone (crash, kill,
+      // daemon restart mid-run) is abandoned — reclaim it now, not in 15 min.
+      try {
+        const info = JSON.parse(fs.readFileSync(path.join(lockPath, 'info.json'), 'utf8'));
+        if (info.pid && !pidAlive(info.pid)) {
+          logger.warn(`[kilit] Sahibi (pid ${info.pid}) yok, kilit geri alınıyor: ${lockPath}`);
+          fs.rmSync(lockPath, { recursive: true, force: true });
+          continue;
+        }
+      } catch {
+        /* no readable info.json yet — fall back to the mtime check below */
+      }
 
       try {
         const ageSec = (Date.now() - fs.statSync(lockPath).mtimeMs) / 1000;

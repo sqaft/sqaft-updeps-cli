@@ -23,6 +23,7 @@ KOMUTLAR
   doctor                         Sistem sağlık kontrolü
   start | stop | restart         launchd daemon kontrolü
   menubar [--install]            SwiftBar/xbar eklentisi
+  reset [--yes] [--keep-daemon]   Config hariç tüm veriyi sil (kuyruk + hatalar)
 
 GENEL
   -h, --help                     Bu yardım
@@ -55,7 +56,8 @@ const COMMAND_OPTIONS = {
     lines: { type: 'string', short: 'n' }
   },
   logs: { follow: { type: 'boolean', short: 'f' }, lines: { type: 'string', short: 'n' } },
-  menubar: { install: { type: 'boolean' } }
+  menubar: { install: { type: 'boolean' } },
+  reset: { yes: { type: 'boolean', short: 'y' }, 'keep-daemon': { type: 'boolean' } }
 };
 
 async function main() {
@@ -121,6 +123,8 @@ async function main() {
       return (await import('../src/commands/daemonctl.js')).cmdRestart();
     case 'menubar':
       return (await import('../src/commands/menubar.js')).cmdMenubar(values);
+    case 'reset':
+      return (await import('../src/commands/reset.js')).cmdReset(values);
     case 'daemon':
       return (await import('../src/daemon.js')).runDaemon();
     default:

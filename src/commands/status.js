@@ -1,7 +1,6 @@
 import { styleText } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { agentStatus } from '../daemon.js';
-import { tildify } from '../paths.js';
 
 /** @param {number} ts */
 function ago(ts) {
@@ -42,16 +41,23 @@ function render() {
   // What's running right now
   L.push(styleText('bold', 'Şu an'));
   const active = state.activeRun;
-  const pending = state.queue?.pending || 0;
+  const jobs = state.queue?.jobs || [];
   if (active) {
     const tag = active.dryRun ? styleText('dim', ' [dry-run]') : '';
     L.push(
       `  ${styleText('cyan', '▶')} ${active.source} → ${active.target}${tag}  ` +
-        styleText('dim', `${dur(Date.now() - active.startedAt)}${pending ? `, kuyrukta ${pending}` : ''}`)
+        styleText('dim', dur(Date.now() - active.startedAt))
     );
-  } else if (pending > 0) {
-    L.push(`  ${styleText('dim', `kuyrukta ${pending} iş, işlenmeyi bekliyor`)}`);
-  } else {
+  }
+  if (jobs.length > 0) {
+    L.push(styleText('dim', `  kuyrukta (${jobs.length}):`));
+    for (const j of jobs.slice(0, 15)) {
+      const from = j.sources?.length ? styleText('dim', ` ← ${j.sources.join(', ')}`) : '';
+      L.push(`  ${styleText('dim', '·')} ${j.target}${from}`);
+    }
+    if (jobs.length > 15) L.push(styleText('dim', `  … +${jobs.length - 15}`));
+  }
+  if (!active && jobs.length === 0) {
     L.push(styleText('dim', '  boşta'));
   }
   L.push('');
@@ -68,15 +74,6 @@ function render() {
       L.push(`      ${styleText('dim', f.message)}`);
     }
     L.push(styleText('dim', '  → "updeps retry --failed" ile hepsini yeniden dene · "updeps show <hedef>" detay'));
-  }
-  L.push('');
-
-  // Pending pushes
-  const pushes = Object.entries(state.repos || {}).filter(([, v]) => v.pendingPushCount > 0);
-  L.push(styleText('bold', 'Bekleyen push'));
-  if (pushes.length === 0) L.push(styleText('dim', '  yok'));
-  for (const [p, v] of pushes) {
-    L.push(`  ⇡${v.pendingPushCount}  ${tildify(p)}  ${styleText('dim', `"${v.lastCommitMessage || ''}"`)}`);
   }
   L.push('');
 

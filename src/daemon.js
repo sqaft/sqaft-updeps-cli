@@ -16,6 +16,7 @@ import { logger } from './logger.js';
 import { loadConfig } from './config.js';
 import { loadState, updateState } from './state.js';
 import { UpdateQueue } from './queue.js';
+import { releaseHeldLocks } from './lock.js';
 import { ReflogWatcher } from './watcher.js';
 import { notifyRunGroup } from './runner.js';
 
@@ -78,14 +79,20 @@ export async function runDaemon() {
       startedAt: Date.now(),
       watchedRepos: config.repos.length
     };
+    // A fresh daemon owns an empty queue; drop anything a crashed run left behind.
+    s.activeRun = null;
+    s.queue = { pending: 0, jobs: [] };
     return s;
   });
 
   const shutdown = async (signal) => {
     logger.info(`${signal} alındı, kapanıyor...`);
     await watcher.stop();
+    releaseHeldLocks(); // don't strand an in-flight run's lock across a restart
     updateState((s) => {
       s.daemon = null;
+      s.activeRun = null;
+      s.queue = { pending: 0, jobs: [] };
       return s;
     });
     try {

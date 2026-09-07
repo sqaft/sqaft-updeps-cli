@@ -20,19 +20,17 @@ export function cmdMenubar(opts = {}) {
   const state = loadState();
   const pid = runningDaemonPid();
 
-  const pending = Object.values(state.repos || {}).reduce(
-    (sum, r) => sum + (r.pendingPushCount || 0),
-    0
-  );
   const lastRun = (state.lastRuns || [])[0];
   const failures = state.openFailures || [];
   const active = state.activeRun;
+  const queued = state.queue?.jobs || [];
 
   // Menu bar title line
+  const inFlight = queued.length + (active ? 1 : 0); // running + waiting
   const icon = !pid ? '⏸' : active ? '↻' : failures.length ? '⚠' : '⇅';
   const badge = [
     failures.length ? ` ⚠${failures.length}` : '',
-    pending > 0 ? ` ⇡${pending}` : ''
+    inFlight ? ` ⧗${inFlight}` : ''
   ].join('');
   console.log(`${icon}${badge}`);
   console.log('---');
@@ -41,8 +39,17 @@ export function cmdMenubar(opts = {}) {
 
   if (active) {
     console.log(
-      `▶ ${active.source} → ${active.target}${state.queue?.pending ? ` (+${state.queue.pending} kuyrukta)` : ''} | color=blue`
+      `▶ ${active.source} → ${active.target}${queued.length ? ` (+${queued.length} kuyrukta)` : ''} | color=blue`
     );
+  }
+
+  if (queued.length > 0) {
+    console.log(`Kuyrukta (${queued.length}) | color=gray`);
+    for (const j of queued.slice(0, 10)) {
+      const from = j.sources?.length ? ` ← ${j.sources.join(', ')}` : '';
+      console.log(`· ${j.target}${from} | size=11 color=gray`);
+    }
+    if (queued.length > 10) console.log(`… +${queued.length - 10} | size=11 color=gray`);
   }
 
   if (lastRun) {
@@ -51,16 +58,6 @@ export function cmdMenubar(opts = {}) {
       `Son: ${lastRun.sourceRepo} → ${lastRun.committed} commit, ${lastRun.failed} hata | color=${lastRun.failed ? 'red' : 'gray'}`
     );
     console.log(`${d} | size=11 color=gray`);
-  }
-
-  if (pending > 0) {
-    console.log('---');
-    console.log(`${pending} commit push bekliyor | color=orange`);
-    for (const [p, r] of Object.entries(state.repos || {})) {
-      if (r.pendingPushCount > 0) {
-        console.log(`⇡${r.pendingPushCount} ${tildify(p)} | size=11`);
-      }
-    }
   }
 
   if (failures.length > 0) {
@@ -82,6 +79,11 @@ export function cmdMenubar(opts = {}) {
   console.log(`Durum | bash="${process.execPath}" param1="${BIN_PATH}" param2="status" terminal=true`);
   console.log(`Geçmiş | bash="${process.execPath}" param1="${BIN_PATH}" param2="history" terminal=true`);
   console.log(`Loglar | bash="${process.execPath}" param1="${BIN_PATH}" param2="logs" param3="-f" terminal=true`);
+  console.log('Bakım | color=gray');
+  console.log(
+    `--Verileri temizle (kuyruk + hatalar) | color=red terminal=true refresh=true ` +
+      `bash="${process.execPath}" param1="${BIN_PATH}" param2="reset"`
+  );
   console.log(`Yenile | refresh=true`);
 }
 

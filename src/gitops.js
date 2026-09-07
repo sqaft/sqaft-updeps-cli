@@ -132,14 +132,3 @@ export function defaultBranch(cwd) {
   if (ref) return ref.replace('refs/remotes/origin/', '');
   return 'main';
 }
-
-/**
- * Count of local commits not yet pushed to the upstream branch.
- * @param {string} cwd
- * @returns {number}
- */
-export function unpushedCount(cwd) {
-  const out = git(['rev-list', '--count', '@{u}..HEAD'], cwd, '');
-  const n = parseInt(out, 10);
-  return Number.isNaN(n) ? 0 : n;
-}
