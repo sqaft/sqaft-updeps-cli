@@ -1,57 +1,115 @@
 import { styleText } from 'node:util';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { agentStatus } from '../daemon.js';
 import { tildify } from '../paths.js';
 
+/** @param {number} ts */
 function ago(ts) {
   if (!ts) return 'hiç';
   const s = Math.round((Date.now() - ts) / 1000);
-  if (s < 60) return `${s}s önce`;
+  if (s < 60) return `${s}sn önce`;
   if (s < 3600) return `${Math.round(s / 60)}dk önce`;
   if (s < 86400) return `${Math.round(s / 3600)}sa önce`;
   return `${Math.round(s / 86400)}g önce`;
 }
 
-export function cmdStatus() {
-  const { agentInstalled, daemonPid, state } = agentStatus();
+/** @param {number} ms */
+function dur(ms) {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}sn`;
+}
 
-  console.log(styleText('bold', 'Daemon'));
-  console.log(`  launchd agent : ${agentInstalled ? styleText('green', 'kurulu') : styleText('dim', 'kurulu değil')}`);
-  console.log(
+function render() {
+  const { agentInstalled, daemonPid, state } = agentStatus();
+  const L = [];
+
+  L.push(styleText('bold', 'Daemon'));
+  L.push(`  launchd agent : ${agentInstalled ? styleText('green', 'kurulu') : styleText('dim', 'kurulu değil')}`);
+  L.push(
     `  süreç         : ${daemonPid ? styleText('green', `çalışıyor (pid ${daemonPid})`) : styleText('yellow', 'çalışmıyor')}`
   );
   if (state.daemon?.startedAt) {
-    console.log(`  başlangıç     : ${ago(state.daemon.startedAt)}`);
-    console.log(`  izlenen repo  : ${state.daemon.watchedRepos}`);
+    L.push(`  başlangıç     : ${ago(state.daemon.startedAt)}`);
+    L.push(`  izlenen repo  : ${state.daemon.watchedRepos}`);
   }
-  console.log('');
+  L.push('');
 
-  const pending = Object.entries(state.repos || {}).filter(([, v]) => v.pendingPushCount > 0);
-  console.log(styleText('bold', 'Bekleyen push'));
-  if (pending.length === 0) {
-    console.log(styleText('dim', '  yok'));
+  // What's running right now
+  L.push(styleText('bold', 'Şu an'));
+  const active = state.activeRun;
+  const pending = state.queue?.pending || 0;
+  if (active) {
+    const tag = active.dryRun ? styleText('dim', ' [dry-run]') : '';
+    L.push(
+      `  ${styleText('cyan', '▶')} ${active.source} → ${active.target}${tag}  ` +
+        styleText('dim', `${dur(Date.now() - active.startedAt)}${pending ? `, kuyrukta ${pending}` : ''}`)
+    );
+  } else if (pending > 0) {
+    L.push(`  ${styleText('dim', `kuyrukta ${pending} iş, işlenmeyi bekliyor`)}`);
   } else {
-    for (const [p, v] of pending) {
-      console.log(`  ⇡${v.pendingPushCount}  ${tildify(p)}  ${styleText('dim', `"${v.lastCommitMessage || ''}"`)}`);
-    }
+    L.push(styleText('dim', '  boşta'));
   }
-  console.log('');
+  L.push('');
 
-  console.log(styleText('bold', 'Son çalışmalar'));
+  // Open failures (persist until resolved)
+  const failures = state.openFailures || [];
+  L.push(styleText('bold', failures.length ? styleText('red', `Açık hatalar (${failures.length})`) : 'Açık hatalar'));
+  if (failures.length === 0) {
+    L.push(styleText('green', '  ✓ yok'));
+  } else {
+    for (const f of failures.slice(0, 15)) {
+      const times = f.count > 1 ? styleText('dim', ` ×${f.count}`) : '';
+      L.push(`  ${styleText('red', '✗')} ${f.source} → ${f.target}${times}  ${styleText('dim', ago(f.lastSeen))}`);
+      L.push(`      ${styleText('dim', f.message)}`);
+    }
+    L.push(styleText('dim', '  → "updeps retry --failed" ile hepsini yeniden dene · "updeps show <hedef>" detay'));
+  }
+  L.push('');
+
+  // Pending pushes
+  const pushes = Object.entries(state.repos || {}).filter(([, v]) => v.pendingPushCount > 0);
+  L.push(styleText('bold', 'Bekleyen push'));
+  if (pushes.length === 0) L.push(styleText('dim', '  yok'));
+  for (const [p, v] of pushes) {
+    L.push(`  ⇡${v.pendingPushCount}  ${tildify(p)}  ${styleText('dim', `"${v.lastCommitMessage || ''}"`)}`);
+  }
+  L.push('');
+
+  // Recent run groups
+  L.push(styleText('bold', 'Son çalışmalar'));
   const runs = (state.lastRuns || []).slice(0, 10);
-  if (runs.length === 0) console.log(styleText('dim', '  yok'));
+  if (runs.length === 0) L.push(styleText('dim', '  yok'));
   for (const r of runs) {
     const bits = [`${r.committed} commit`, `${r.unchanged} güncel`];
     if (r.failed) bits.push(styleText('red', `${r.failed} hata`));
     if (r.skipped) bits.push(styleText('dim', `${r.skipped} atlandı`));
-    console.log(`  ${ago(r.timestamp).padEnd(10)} ${r.sourceRepo} ${styleText('dim', `(${r.trigger} ${r.sha})`)} → ${bits.join(', ')}`);
+    L.push(
+      `  ${ago(r.timestamp).padEnd(9)} ${r.sourceRepo} ${styleText('dim', `(${r.trigger} ${r.sha})`)} → ${bits.join(', ')}`
+    );
   }
-  console.log('');
 
-  const errors = state.errors || [];
-  if (errors.length > 0) {
-    console.log(styleText('bold', styleText('red', 'Son hatalar')));
-    for (const e of errors.slice(0, 10)) {
-      console.log(`  ${ago(e.timestamp).padEnd(10)} ${e.sourceRepo} → ${e.target}: ${e.message}`);
-    }
+  return L.join('\n');
+}
+
+/**
+ * @param {{ watch?: boolean }} opts
+ */
+export async function cmdStatus(opts = {}) {
+  if (!opts.watch) {
+    console.log(render());
+    return;
+  }
+
+  process.on('SIGINT', () => {
+    process.stdout.write('\x1b[?25h'); // show cursor
+    process.exit(0);
+  });
+  process.stdout.write('\x1b[?25l'); // hide cursor
+  for (;;) {
+    process.stdout.write('\x1b[2J\x1b[H'); // clear + home
+    console.log(styleText('dim', `updeps status --watch · ${new Date().toLocaleTimeString()} · Ctrl-C çıkış`));
+    console.log('');
+    console.log(render());
+    await sleep(1000);
   }
 }

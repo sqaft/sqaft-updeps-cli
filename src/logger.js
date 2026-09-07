@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { styleText } from 'node:util';
 import { LOG_FILE, LOGS_DIR } from './paths.js';
+import { redact } from './redact.js';
 
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
@@ -48,6 +49,7 @@ function rotateIfNeeded() {
 function writeLine(level, message) {
   if (LEVELS[level] < LEVELS[threshold]) return;
 
+  message = redact(message);
   const timestamp = new Date().toISOString();
   const line = `${timestamp} [${level.toUpperCase()}] ${message}\n`;
 

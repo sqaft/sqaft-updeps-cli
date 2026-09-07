@@ -14,6 +14,8 @@ import {
   unpushedCount
 } from './gitops.js';
 import { updateState } from './state.js';
+import { appendEvent } from './journal.js';
+import { redact } from './redact.js';
 import { sendNotification, refreshSwiftBar } from './notify.js';
 
 /**
@@ -32,25 +34,99 @@ import { sendNotification, refreshSwiftBar } from './notify.js';
  * @property {string} message
  */
 
+let groupSeq = 0;
+
+/**
+ * Generates a run-group id (shared by every target of one trigger).
+ * @param {string} [prefix]
+ * @returns {string}
+ */
+export function newGroupId(prefix = 'g') {
+  return `${prefix}${Date.now().toString(36)}${(++groupSeq).toString(36)}`;
+}
+
+function errId(source, target) {
+  return `${source}->${target}`;
+}
+
 /**
  * Runs the update pipeline for a single target repo.
  * @param {object} params
  * @param {ReturnType<import('./config.js').resolveConfig>} params.config
  * @param {object} params.target      resolved package object
  * @param {TriggerContext} params.trigger
+ * @param {string} [params.group]     run-group id for journal correlation
  * @param {boolean} [params.dryRun=false]
  * @param {boolean} [params.echo=false]
  * @returns {Promise<TargetResult>}
  */
-export async function runTarget({ config, target, trigger, dryRun = false, echo = false }) {
+export async function runTarget({ config, target, trigger, group, dryRun = false, echo = false }) {
   const label = target.name;
+  const source = trigger.sourceName;
+  const groupId = group || newGroupId();
+  const startedAt = Date.now();
+  const id = errId(source, label);
+
+  /** Journals the outcome, updates openFailures, and returns the result. */
+  const emit = (status, rawMessage, extra = {}) => {
+    const message = redact(rawMessage);
+    if (extra.errorTail) extra.errorTail = redact(extra.errorTail);
+    if (extra.commands) extra.commands = extra.commands.map(redact);
+    appendEvent({
+      kind: 'target',
+      group: groupId,
+      source,
+      sourceSha: (trigger.sha || '').slice(0, 12),
+      trigger: trigger.trigger,
+      target: label,
+      targetPath: target.path,
+      status,
+      durationMs: Date.now() - startedAt,
+      message,
+      ...extra
+    });
+
+    updateState((state) => {
+      state.openFailures = state.openFailures || [];
+      if (status === 'failed') {
+        const existing = state.openFailures.find((f) => f.id === id);
+        if (existing) {
+          existing.message = message;
+          existing.errorTail = extra.errorTail || '';
+          existing.lastSeen = Date.now();
+          existing.count = (existing.count || 1) + 1;
+          existing.group = groupId;
+        } else {
+          state.openFailures.unshift({
+            id,
+            source,
+            target: label,
+            targetPath: target.path,
+            message,
+            errorTail: extra.errorTail || '',
+            firstSeen: Date.now(),
+            lastSeen: Date.now(),
+            count: 1,
+            group: groupId
+          });
+        }
+      } else if (status === 'committed' || status === 'unchanged') {
+        // a clean run resolves any standing failure for this pair
+        state.openFailures = state.openFailures.filter((f) => f.id !== id);
+      }
+      return state;
+    });
+
+    if (status === 'failed') logger.error(`[${label}] ${message}`);
+    return { status, target: label, message };
+  };
 
   if (trigger.trigger !== 'manual') {
     if (!target.triggers.includes(trigger.trigger)) {
-      return skip(label, `tetikleyici '${trigger.trigger}' bu hedef için kapalı`);
+      return emit('skipped', `tetikleyici '${trigger.trigger}' bu hedef için kapalı`);
     }
     if (target.branches.length > 0 && trigger.branch && !target.branches.includes(trigger.branch)) {
-      return skip(label, `branch '${trigger.branch}' bu hedef için listede değil`);
+      return emit('skipped', `branch '${trigger.branch}' bu hedef için listede değil`);
     }
   }
 
@@ -61,25 +137,38 @@ export async function runTarget({ config, target, trigger, dryRun = false, echo 
       waitTimeoutSec: target.waitTimeoutSec
     });
   } catch (err) {
-    return finishError(label, trigger, err.message, echo);
+    return emit('failed', err.message);
   }
+
+  updateState((state) => {
+    state.activeRun = {
+      group: groupId,
+      source,
+      target: label,
+      targetPath: target.path,
+      startedAt,
+      dryRun
+    };
+    return state;
+  });
+  refreshSwiftBar();
 
   try {
     const pre = checkPreconditions(target.path);
     if (!pre.ok) {
       logger.warn(`[${label}] ${pre.reason}`);
-      return skip(label, pre.reason);
+      return emit('skipped', pre.reason);
     }
 
     const before = statusSnapshot(target.path);
     if (target.dirtyPolicy === 'skip' && before.size > 0) {
-      return skip(label, 'working tree kirli (dirtyPolicy: skip)');
+      return emit('skipped', 'working tree kirli (dirtyPolicy: skip)');
     }
 
     const pkgList = derivePackageNames(config, target.path);
     const vars = {
-      pkg: trigger.sourceName,
-      pkgList: pkgList.length ? pkgList : [trigger.sourceName],
+      pkg: source,
+      pkgList: pkgList.length ? pkgList : [source],
       sha: trigger.sha || '',
       sourcePath: trigger.sourcePath || '',
       sourceBranch: trigger.branch || '',
@@ -87,10 +176,12 @@ export async function runTarget({ config, target, trigger, dryRun = false, echo 
       targetBranch: activeBranch(target.path)
     };
 
-    logger.info(`[${label}] güncelleme başlıyor (kaynak: ${trigger.sourceName})`);
+    logger.info(`[${label}] güncelleme başlıyor (kaynak: ${source})`);
 
+    const ranCommands = [];
     for (const rawCmd of target.commands) {
       const cmd = interpolateCommand(rawCmd, vars);
+      ranCommands.push(cmd);
       logger.info(`[${label}] $ ${cmd}`);
       const result = await runShell(cmd, {
         cwd: target.path,
@@ -101,10 +192,13 @@ export async function runTarget({ config, target, trigger, dryRun = false, echo 
         const why = result.timedOut
           ? `zaman aşımı (${target.commandTimeout}s)`
           : `çıkış kodu ${result.code}`;
-        const tail = (result.stderr || result.stdout || '').trim().split('\n').slice(-5).join('\n');
+        const tail = (result.stderr || result.stdout || '').trim().split('\n').slice(-8).join('\n');
         logger.error(`[${label}] komut hatası: ${why}\n${tail}`);
         safeRollback(target.path, before, statusSnapshot(target.path));
-        return finishError(label, trigger, `komut hatası (${cmd}): ${why}`, echo);
+        return emit('failed', `komut hatası (${cmd}): ${why}`, {
+          commands: ranCommands,
+          errorTail: tail
+        });
       }
     }
 
@@ -114,8 +208,7 @@ export async function runTarget({ config, target, trigger, dryRun = false, echo 
 
     if (changed.length === 0) {
       logger.info(`[${label}] değişiklik yok (güncel)`);
-      clearError(label, trigger);
-      return { status: 'unchanged', target: label, message: 'değişiklik yok' };
+      return emit('unchanged', 'değişiklik yok', { commands: ranCommands });
     }
 
     const commitMsg = interpolateMessage(target.commitMessage, vars);
@@ -124,8 +217,11 @@ export async function runTarget({ config, target, trigger, dryRun = false, echo 
       const stat = git(['diff', '--stat'], target.path, '');
       logger.info(`[${label}] [dry-run] commit atılmayacak:\n${stat}`);
       safeRollback(target.path, before, after);
-      clearError(label, trigger);
-      return { status: 'committed', target: label, message: `[dry-run] ${commitMsg}` };
+      return emit('committed', `[dry-run] ${commitMsg}`, {
+        commands: ranCommands,
+        files: changed,
+        dryRun: true
+      });
     }
 
     const shortSha = selectiveCommit(target.path, changed, commitMsg);
@@ -137,25 +233,43 @@ export async function runTarget({ config, target, trigger, dryRun = false, echo 
         gitOrThrow(['push'], target.path);
         logger.info(`[${label}] push tamam`);
       } catch (err) {
-        logger.error(`[${label}] push başarısız: ${err.message}`);
-        return finishError(label, trigger, `commit atıldı ama push başarısız: ${err.message}`, echo);
+        return emit('failed', `commit atıldı ama push başarısız: ${err.message}`, {
+          commands: ranCommands,
+          commitSha: shortSha
+        });
       }
     }
 
     updateState((state) => {
+      // Keyed by target path. Note: a repo that is both a source and a target
+      // has ONE entry here; `lastProcessedSha` is reserved for source-side
+      // dedup (written by recordGroupDone / the watcher baseline), so the
+      // target side uses its own fields and never touches it.
       state.repos[target.path] = {
-        lastProcessedSha: trigger.sha || '',
-        lastProcessedAt: Date.now(),
+        ...(state.repos[target.path] || {}),
+        lastUpdatedFrom: source,
+        lastUpdatedSha: (trigger.sha || '').slice(0, 12),
+        lastUpdatedAt: Date.now(),
         pendingPushCount: unpushedCount(target.path),
         lastCommitMessage: commitMsg
       };
-      state.errors = (state.errors || []).filter((e) => e.id !== errId(label, trigger));
       return state;
     });
 
-    return { status: 'committed', target: label, message: commitMsg };
+    return emit('committed', commitMsg, {
+      commands: ranCommands,
+      commitSha: shortSha,
+      files: changed,
+      pushed: Boolean(target.push)
+    });
   } finally {
     lock.release();
+    updateState((state) => {
+      if (state.activeRun && state.activeRun.group === groupId && state.activeRun.target === label) {
+        state.activeRun = null;
+      }
+      return state;
+    });
     refreshSwiftBar();
   }
 }
@@ -166,19 +280,22 @@ export async function runTarget({ config, target, trigger, dryRun = false, echo 
  * @param {ReturnType<import('./config.js').resolveConfig>} params.config
  * @param {object} params.sourceRepo
  * @param {TriggerContext} params.trigger
+ * @param {string} [params.group]
  * @param {boolean} [params.dryRun=false]
  * @param {boolean} [params.echo=false]
  * @param {string|null} [params.targetFilter]
- * @returns {Promise<{ committed:number, unchanged:number, failed:number, skipped:number, results: TargetResult[] }>}
+ * @returns {Promise<{ group:string, committed:number, unchanged:number, failed:number, skipped:number, results: TargetResult[] }>}
  */
 export async function runSourceRepo({
   config,
   sourceRepo,
   trigger,
+  group,
   dryRun = false,
   echo = false,
   targetFilter = null
 }) {
+  const groupId = group || newGroupId();
   let targets = sourceRepo.packages;
   if (targetFilter) {
     targets = targets.filter(
@@ -186,10 +303,20 @@ export async function runSourceRepo({
     );
   }
 
+  appendEvent({
+    kind: 'group_start',
+    group: groupId,
+    source: sourceRepo.name,
+    trigger: trigger.trigger,
+    sha: (trigger.sha || '').slice(0, 12),
+    targetCount: targets.length,
+    dryRun
+  });
+
   const results = [];
   for (const target of targets) {
     try {
-      results.push(await runTarget({ config, target, trigger, dryRun, echo }));
+      results.push(await runTarget({ config, target, trigger, group: groupId, dryRun, echo }));
     } catch (err) {
       logger.error(`[${target.name}] beklenmeyen hata: ${err.message}`);
       results.push({ status: 'failed', target: target.name, message: err.message });
@@ -197,6 +324,7 @@ export async function runSourceRepo({
   }
 
   const tally = {
+    group: groupId,
     committed: results.filter((r) => r.status === 'committed').length,
     unchanged: results.filter((r) => r.status === 'unchanged').length,
     failed: results.filter((r) => r.status === 'failed').length,
@@ -204,10 +332,35 @@ export async function runSourceRepo({
     results
   };
 
+  recordGroupDone({ sourceRepo, trigger, tally });
+  return tally;
+}
+
+/**
+ * Journals a group_done event and updates state.lastRuns.
+ * @param {object} params
+ * @param {object} params.sourceRepo   { name, path }
+ * @param {TriggerContext} params.trigger
+ * @param {{ group:string, committed:number, unchanged:number, failed:number, skipped:number }} params.tally
+ */
+export function recordGroupDone({ sourceRepo, trigger, tally }) {
+  appendEvent({
+    kind: 'group_done',
+    group: tally.group,
+    source: sourceRepo.name,
+    trigger: trigger.trigger,
+    sha: (trigger.sha || '').slice(0, 12),
+    committed: tally.committed,
+    unchanged: tally.unchanged,
+    failed: tally.failed,
+    skipped: tally.skipped
+  });
+
   updateState((state) => {
     state.lastRuns = [
       {
         timestamp: Date.now(),
+        group: tally.group,
         sourceRepo: sourceRepo.name,
         trigger: trigger.trigger,
         sha: (trigger.sha || '').slice(0, 7),
@@ -218,7 +371,7 @@ export async function runSourceRepo({
       },
       ...(state.lastRuns || [])
     ].slice(0, 50);
-    if (trigger.sha) {
+    if (trigger.sha && sourceRepo.path) {
       state.repos[sourceRepo.path] = {
         ...(state.repos[sourceRepo.path] || {}),
         lastProcessedSha: trigger.sha,
@@ -232,41 +385,6 @@ export async function runSourceRepo({
     `[${sourceRepo.name}] tamamlandı: ${tally.committed} commit, ${tally.unchanged} güncel, ` +
       `${tally.failed} hata, ${tally.skipped} atlandı`
   );
-
-  return tally;
-}
-
-function skip(target, message) {
-  logger.info(`[${target}] atlandı: ${message}`);
-  return { status: 'skipped', target, message };
-}
-
-function errId(label, trigger) {
-  return `${trigger.sourceName}->${label}`;
-}
-
-function finishError(label, trigger, message, echo) {
-  logger.error(`[${label}] ${message}`);
-  updateState((state) => {
-    state.errors = (state.errors || []).filter((e) => e.id !== errId(label, trigger));
-    state.errors.unshift({
-      id: errId(label, trigger),
-      sourceRepo: trigger.sourceName,
-      target: label,
-      message,
-      timestamp: Date.now()
-    });
-    state.errors = state.errors.slice(0, 20);
-    return state;
-  });
-  return { status: 'failed', target: label, message };
-}
-
-function clearError(label, trigger) {
-  updateState((state) => {
-    state.errors = (state.errors || []).filter((e) => e.id !== errId(label, trigger));
-    return state;
-  });
 }
 
 /**

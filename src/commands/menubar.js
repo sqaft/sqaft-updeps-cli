@@ -24,14 +24,25 @@ export function cmdMenubar(opts = {}) {
     0
   );
   const lastRun = (state.lastRuns || [])[0];
-  const anyFailed = (state.errors || []).length > 0;
+  const failures = state.openFailures || [];
+  const active = state.activeRun;
 
   // Menu bar title line
-  const icon = !pid ? '⏸' : anyFailed ? '⚠' : '⇅';
-  console.log(`${icon}${pending > 0 ? ` ⇡${pending}` : ''}`);
+  const icon = !pid ? '⏸' : active ? '↻' : failures.length ? '⚠' : '⇅';
+  const badge = [
+    failures.length ? ` ⚠${failures.length}` : '',
+    pending > 0 ? ` ⇡${pending}` : ''
+  ].join('');
+  console.log(`${icon}${badge}`);
   console.log('---');
 
   console.log(pid ? `Daemon çalışıyor (pid ${pid}) | color=green` : 'Daemon kapalı | color=orange');
+
+  if (active) {
+    console.log(
+      `▶ ${active.source} → ${active.target}${state.queue?.pending ? ` (+${state.queue.pending} kuyrukta)` : ''} | color=blue`
+    );
+  }
 
   if (lastRun) {
     const d = new Date(lastRun.timestamp).toLocaleString();
@@ -51,16 +62,24 @@ export function cmdMenubar(opts = {}) {
     }
   }
 
-  if ((state.errors || []).length > 0) {
+  if (failures.length > 0) {
     console.log('---');
-    console.log('Hatalar | color=red');
-    for (const e of state.errors.slice(0, 5)) {
-      console.log(`${e.target}: ${e.message} | size=11 color=red`);
+    console.log(`Açık hatalar (${failures.length}) | color=red`);
+    for (const f of failures.slice(0, 8)) {
+      const times = f.count > 1 ? ` ×${f.count}` : '';
+      console.log(
+        `${f.source} → ${f.target}${times}: ${f.message} | size=11 color=red ` +
+          `bash="${process.execPath}" param1="${BIN_PATH}" param2="show" param3="${f.target}" terminal=true`
+      );
     }
+    console.log(
+      `↻ Hepsini yeniden dene | color=red bash="${process.execPath}" param1="${BIN_PATH}" param2="retry" param3="--failed" terminal=true`
+    );
   }
 
   console.log('---');
   console.log(`Durum | bash="${process.execPath}" param1="${BIN_PATH}" param2="status" terminal=true`);
+  console.log(`Geçmiş | bash="${process.execPath}" param1="${BIN_PATH}" param2="history" terminal=true`);
   console.log(`Loglar | bash="${process.execPath}" param1="${BIN_PATH}" param2="logs" param3="-f" terminal=true`);
   console.log(`Yenile | refresh=true`);
 }

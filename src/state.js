@@ -3,11 +3,12 @@ import path from 'node:path';
 import { STATE_DIR, STATE_FILE } from './paths.js';
 
 const EMPTY_STATE = {
-  repos: {},        // sourcePath|targetPath -> { lastProcessedSha, lastProcessedAt, pendingPushCount, lastCommitMessage }
-  lastRuns: [],     // [{ timestamp, sourceRepo, trigger, sha, committed, unchanged, failed, skipped }]
-  errors: [],       // [{ id, sourceRepo, target, targetPath, message, timestamp }]
-  activeRuns: [],   // [{ id, sourceRepo, target, targetPath, startedAt }]
-  daemon: null      // { pid, startedAt, watchedRepos }
+  repos: {},          // sourcePath|targetPath -> { lastProcessedSha, lastProcessedAt, pendingPushCount, lastCommitMessage }
+  lastRuns: [],       // [{ timestamp, sourceRepo, trigger, sha, committed, unchanged, failed, skipped }]
+  openFailures: [],   // [{ id, source, target, targetPath, message, errorTail, firstSeen, lastSeen, count }]
+  activeRun: null,    // { group, source, target, targetPath, startedAt } — what is running right now
+  queue: { pending: 0 }, // { pending } — jobs waiting behind activeRun
+  daemon: null        // { pid, startedAt, watchedRepos }
 };
 
 /**

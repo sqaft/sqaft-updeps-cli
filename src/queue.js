@@ -1,8 +1,7 @@
 import { logger } from './logger.js';
-import { loadState } from './state.js';
-import { runTarget } from './runner.js';
-
-let groupSeq = 0;
+import { loadState, updateState } from './state.js';
+import { runTarget, recordGroupDone, newGroupId } from './runner.js';
+import { appendEvent } from './journal.js';
 
 /**
  * Global serial queue with per-source debouncing and job coalescing.
@@ -38,7 +37,7 @@ export class UpdateQueue {
     this.pendingEvents = new Map();
     /** @type {Array<object>} ready jobs, processed front to back */
     this.ready = [];
-    /** @type {Map<number, { title:string, remaining:number, tally:object }>} */
+    /** @type {Map<string, { title, remaining, tally, sourceRepo, event }>} */
     this.groups = new Map();
     /** @type {Set<string>} target paths with an in-flight job */
     this.runningTargets = new Set();
@@ -91,13 +90,24 @@ export class UpdateQueue {
     const { sourceRepo, event } = item;
     if (sourceRepo.packages.length === 0) return;
 
-    const groupId = ++groupSeq;
+    const groupId = newGroupId();
     const group = {
       title: `updeps: ${sourceRepo.name}`,
       remaining: 0,
-      tally: { committed: 0, unchanged: 0, failed: 0, skipped: 0 }
+      tally: { group: groupId, committed: 0, unchanged: 0, failed: 0, skipped: 0 },
+      sourceRepo,
+      event
     };
     this.groups.set(groupId, group);
+
+    appendEvent({
+      kind: 'group_start',
+      group: groupId,
+      source: sourceRepo.name,
+      trigger: event.trigger,
+      sha: (event.sha || '').slice(0, 12),
+      targetCount: sourceRepo.packages.length
+    });
 
     for (const target of sourceRepo.packages) {
       const source = {
@@ -140,11 +150,24 @@ export class UpdateQueue {
     this.ready.splice(this.ready.indexOf(job), 1);
     this.processing = true;
     this.runningTargets.add(job.targetPath);
+    this._writeQueueDepth();
     this._process(job).finally(() => {
       this.processing = false;
       this.runningTargets.delete(job.targetPath);
+      this._writeQueueDepth();
       this._drain();
     });
+  }
+
+  _writeQueueDepth() {
+    try {
+      updateState((state) => {
+        state.queue = { pending: this.ready.length };
+        return state;
+      });
+    } catch {
+      /* ignore */
+    }
   }
 
   /** @param {object} job */
@@ -158,10 +181,16 @@ export class UpdateQueue {
       sourceName: primary.name,
       sourcePath: primary.path
     };
+    const primaryGroup = [...job.groupIds][job.groupIds.size - 1];
 
     let result;
     try {
-      result = await this.runner({ config: this.config, target: job.target, trigger });
+      result = await this.runner({
+        config: this.config,
+        target: job.target,
+        trigger,
+        group: primaryGroup
+      });
     } catch (err) {
       logger.error(`[${job.target.name}] kuyruk hatası: ${err.message}`);
       result = { status: 'failed', target: job.target.name, message: err.message };
@@ -176,11 +205,28 @@ export class UpdateQueue {
     }
   }
 
-  /** @param {number} groupId */
+  /** @param {string} groupId */
   _settleGroup(groupId) {
     const group = this.groups.get(groupId);
     if (!group) return;
     this.groups.delete(groupId);
+
+    try {
+      recordGroupDone({
+        sourceRepo: group.sourceRepo,
+        trigger: {
+          trigger: group.event.trigger,
+          branch: group.event.branch,
+          sha: group.event.sha,
+          sourceName: group.sourceRepo.name,
+          sourcePath: group.sourceRepo.path
+        },
+        tally: group.tally
+      });
+    } catch (err) {
+      logger.error(`group_done kaydı hatası: ${err.message}`);
+    }
+
     try {
       this.onGroupDone({ title: group.title, tally: group.tally });
     } catch (err) {

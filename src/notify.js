@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { logger } from './logger.js';
+import { redact } from './redact.js';
 
 let _hasTerminalNotifier = null;
 function hasTerminalNotifier() {
@@ -32,6 +33,8 @@ export function terminalNotifierArgs({ type, title, message }) {
  */
 export function sendNotification({ type, title, message, enabled = true }) {
   if (!enabled) return;
+  title = redact(title);
+  message = redact(message);
 
   const subtitle = type === 'fail' ? '❌ hata var' : '✅ tamamlandı';
   const sound = type === 'fail' ? 'Basso' : 'Glass';

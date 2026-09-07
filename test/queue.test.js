@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { tmpDir } from './helpers.js';
 
@@ -10,6 +12,15 @@ process.env.XDG_CONFIG_HOME = dir;
 const { UpdateQueue } = await import('../src/queue.js');
 const { resolveConfig } = await import('../src/config.js');
 
+// Each test starts from a clean state file so persisted lastProcessedSha values
+// from one test don't dedup-skip the next.
+test.beforeEach(() => {
+  try {
+    fs.rmSync(path.join(dir, 'sqaft-updeps', 'state.json'));
+  } catch {
+    /* none yet */
+  }
+});
 test.after(cleanup);
 
 function makeConfig(overrides = {}) {

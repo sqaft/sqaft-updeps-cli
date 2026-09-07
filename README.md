@@ -162,8 +162,11 @@ döngülerini (cycle) uyarır.
 | `updeps add <kaynak> --target <hedef> [--name N] [--target-name N] [--command "..."]` | Config'e ilişki ekler |
 | `updeps remove <kaynak> [hedef]` | İlişkiyi veya kaynağı siler |
 | `updeps run [kaynak] [--target X] [--dry-run]` | Manuel çalıştırma (tetikleyici/branch filtrelerini atlar) |
-| `updeps status` | Daemon durumu, bekleyen push'lar, son çalışmalar, son hatalar |
-| `updeps logs [-f] [-n N]` | Logları görüntüler |
+| `updeps retry --failed` \| `updeps retry <hedef>` | Açık hataları yeniden dener |
+| `updeps status [-w/--watch]` | Şu an ne çalışıyor, kuyruk, **açık hatalar**, bekleyen push'lar, son çalışmalar. `--watch` = saniyede bir yenilenen canlı görünüm |
+| `updeps history [--failed] [--repo X] [--since 2d] [-n N] [--json]` | Tüm işlem geçmişi (kalıcı JSONL günlüğünden) |
+| `updeps show <grup-id \| hedef \| kaynak>` | Bir çalışmanın tam detayı: komutlar, çıktı, commit SHA, hata çıktısı |
+| `updeps logs [-f] [-n N]` | Ham log |
 | `updeps doctor` | Sistem sağlık kontrolü |
 | `updeps start` · `stop` · `restart` | launchd daemon kontrolü |
 | `updeps menubar [--install]` | SwiftBar / xbar menü çubuğu eklentisi |
@@ -180,13 +183,33 @@ olan bir hedefe yeni olay gelirse iş bittikten sonra tekrar sıraya alınır.
 
 ---
 
+## İzleme ve hata takibi
+
+Her işlem `~/.local/state/sqaft-updeps/journal.jsonl` dosyasına tek satır JSON
+olarak, kalıcı biçimde yazılır (5MB'da `.1`'e döner). Üç yerden görürsün:
+
+- **`updeps status`** — şu an ne çalışıyor (kuyruk N iş), **çözülmemiş açık
+  hatalar**, bekleyen push'lar, son 10 çalışma. `--watch` ile terminal
+  penceresini açık bırakıp canlı izlersin.
+- **`updeps history --failed --since 3d`** — filtreli geçmiş; `--json` ile boru.
+- **`updeps show <hedef>`** — tek çalışmanın komutları, çıktısı, commit'i.
+
+Açık hatalar `state.json`'da kalıcı tutulur; o hedef bir daha başarılı/değişiksiz
+çalışınca (daemon'dan veya `updeps retry --failed` ile) otomatik temizlenir.
+menü çubuğunda `⚠N` rozeti ve tıklanabilir hata listesi görünür.
+
+**Gizli bilgi maskeleme:** komut çıktısındaki git remote token'ları, GitHub
+PAT'leri, `Authorization` header'ları vb. log'a, journal'a ve bildirime
+yazılmadan önce `***` ile maskelenir (`src/redact.js`).
+
 ## Dosya konumları
 
 ```
 ~/.config/sqaft-updeps/config.json                    tanım (sen düzenlersin)
-~/.local/state/sqaft-updeps/state.json                runtime durumu
+~/.local/state/sqaft-updeps/state.json                runtime durumu, açık hatalar
+~/.local/state/sqaft-updeps/journal.jsonl             kalıcı işlem günlüğü
 ~/.local/state/sqaft-updeps/locks/                    hedef repo kilitleri
-~/.local/state/sqaft-updeps/logs/updeps.log           log (5MB'da rotasyon)
+~/.local/state/sqaft-updeps/logs/updeps.log           ham log (5MB'da rotasyon)
 ~/Library/LaunchAgents/com.sqaft.updeps.daemon.plist  launchd agent
 ```
 

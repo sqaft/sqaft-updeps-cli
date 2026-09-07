@@ -15,8 +15,11 @@ KOMUTLAR
   add <kaynak> --target <hedef>  Yeni ilişki ekle (--name, --target-name, --command)
   remove <kaynak> [hedef]        İlişkiyi veya kaynağı sil
   run [kaynak] [--target X]      Manuel çalıştır (--dry-run)
-  status                         Daemon durumu, bekleyen push'lar, son çalışmalar
-  logs [-f] [-n N]               Logları görüntüle
+  retry --failed | <hedef>      Açık hataları yeniden dene
+  status [-w/--watch]            Şu an ne çalışıyor, açık hatalar, son çalışmalar
+  history [--failed] [--repo X]  Tüm işlem geçmişi ([--since 2d] [-n N] [--json])
+  show <grup|hedef>             Bir çalışmanın tam detayı (komutlar, çıktı, commit)
+  logs [-f] [-n N]               Ham log
   doctor                         Sistem sağlık kontrolü
   start | stop | restart         launchd daemon kontrolü
   menubar [--install]            SwiftBar/xbar eklentisi
@@ -42,6 +45,15 @@ const COMMAND_OPTIONS = {
     command: { type: 'string', multiple: true }
   },
   run: { target: { type: 'string' }, 'dry-run': { type: 'boolean' } },
+  retry: { failed: { type: 'boolean' } },
+  status: { watch: { type: 'boolean', short: 'w' } },
+  history: {
+    failed: { type: 'boolean' },
+    repo: { type: 'string' },
+    since: { type: 'string' },
+    json: { type: 'boolean' },
+    lines: { type: 'string', short: 'n' }
+  },
   logs: { follow: { type: 'boolean', short: 'f' }, lines: { type: 'string', short: 'n' } },
   menubar: { install: { type: 'boolean' } }
 };
@@ -89,8 +101,14 @@ async function main() {
       return (await import('../src/commands/remove.js')).cmdRemove(positionals);
     case 'run':
       return (await import('../src/commands/run.js')).cmdRun(positionals, values);
+    case 'retry':
+      return (await import('../src/commands/retry.js')).cmdRetry(positionals, values);
     case 'status':
-      return (await import('../src/commands/status.js')).cmdStatus();
+      return (await import('../src/commands/status.js')).cmdStatus(values);
+    case 'history':
+      return (await import('../src/commands/history.js')).cmdHistory(values);
+    case 'show':
+      return (await import('../src/commands/show.js')).cmdShow(positionals);
     case 'logs':
       return (await import('../src/commands/logs.js')).cmdLogs(values);
     case 'doctor':
