@@ -1,0 +1,51 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { STATE_DIR, STATE_FILE } from './paths.js';
+
+const EMPTY_STATE = {
+  repos: {},        // sourcePath|targetPath -> { lastProcessedSha, lastProcessedAt, pendingPushCount, lastCommitMessage }
+  lastRuns: [],     // [{ timestamp, sourceRepo, trigger, sha, committed, unchanged, failed, skipped }]
+  errors: [],       // [{ id, sourceRepo, target, targetPath, message, timestamp }]
+  activeRuns: [],   // [{ id, sourceRepo, target, targetPath, startedAt }]
+  daemon: null      // { pid, startedAt, watchedRepos }
+};
+
+/**
+ * Reads the state file. Returns a fresh empty state if missing or corrupt.
+ * @returns {typeof EMPTY_STATE}
+ */
+export function loadState() {
+  try {
+    const raw = fs.readFileSync(STATE_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return { ...structuredClone(EMPTY_STATE), ...parsed };
+  } catch {
+    return structuredClone(EMPTY_STATE);
+  }
+}
+
+/**
+ * Writes state atomically (temp file + rename).
+ * @param {object} state
+ */
+export function saveState(state) {
+  if (!fs.existsSync(STATE_DIR)) {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+  }
+  const tmp = path.join(STATE_DIR, `.state.${process.pid}.${Date.now()}.tmp`);
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf8');
+  fs.renameSync(tmp, STATE_FILE);
+}
+
+/**
+ * Loads state, applies a mutator, and saves the result.
+ * The mutator may return the state or mutate it in place.
+ * @param {(state: any) => any} mutator
+ * @returns {any} the saved state
+ */
+export function updateState(mutator) {
+  const state = loadState();
+  const next = mutator(state) || state;
+  saveState(next);
+  return next;
+}

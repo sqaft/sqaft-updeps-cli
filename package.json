@@ -1,0 +1,30 @@
+{
+  "name": "@sqaft/updeps-cli",
+  "version": "0.1.0",
+  "description": "Bir paket push edildiğinde onu bağımlılık olarak kullanan repoları otomatik güncelleyen, dil ve paket yöneticisi bağımsız macOS CLI + arka plan servisi",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "updeps": "./bin/updeps.js",
+    "sqaft-updeps": "./bin/updeps.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "examples/"
+  ],
+  "scripts": {
+    "test": "node --test --test-force-exit 'test/*.test.js'",
+    "start": "node bin/updeps.js daemon"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "os": [
+    "darwin"
+  ],
+  "license": "MIT"
+}
