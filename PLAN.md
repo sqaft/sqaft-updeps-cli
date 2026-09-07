@@ -1,63 +1,70 @@
-# pkgsync — Proje Prompt'u
+# @sqaft/updeps-cli — Proje Planı
 
 ## Görev
 
-macOS için `pkgsync` adında bir global CLI aracı geliştir. Bu araç, yerel makinede farklı klasörlerde ve farklı GitHub organizasyonlarında duran, birbirini git dependency olarak kullanan NPM paketleri arasındaki bağımlılık güncellemesini otomatikleştirir.
+macOS için `@sqaft/updeps-cli` (komut: `updeps` / `sqaft-updeps`) adında bir global CLI aracı geliştir. Bu araç, yerel makinede farklı klasörlerde duran, birbirini bağımlılık olarak ekleyen yazılım projeleri arasında, bir paketin `git push` (veya ilgili tetikleyici) edilmesinden sonra kendisini bağımlılık olarak kullanan diğer repoların otomatik güncellenmesini, commit atılmasını ve istenirse push edilmesini sağlar.
 
-**Senaryo:** `@acme/core` paketini güncelleyip push ediyorum. Bu paketi dependency olarak kullanan `@acme/client` ve `@beta/dashboard` repolarına gidilip `npm update` çalıştırılması, değişen `package-lock.json`'ın commit'lenmesi ve bana bir macOS bildirimi verilmesi gerekiyor. Bunu elle yapmak istemiyorum.
-
-Aşağıdaki tasarım kararları tartışılarak verildi, bunlara uy. Bir karara katılmıyorsan veya teknik bir engel görüyorsan **kod yazmadan önce söyle**, tartışalım.
+**Senaryo:** `~/workspace/http` paketini güncelleyip push ediyorum. Bu paketi kullanan `~/workspace/client` reposuna gidilip tanımlanan güncelleme komutlarının (`npm update`, `cargo update`, `pip install`, vb.) çalıştırılması, değişen dosyaların commit'lenmesi, ayara göre push edilmesi ve macOS bildirimi verilmesi gerekiyor.
 
 ---
 
-## Temel ilkeler
+## Temel İlkeler
 
-1. **Yönetilen repolar hiçbir şekilde değiştirilmez.** Onlara config dosyası, hook, dependency, hiçbir şey eklenmez. `pkgsync` onların varlığından haberdardır, onlar `pkgsync`'ten habersizdir. Tek dokunulan yer: güncelleme sırasında `package-lock.json` ve onun commit'i.
-2. **Tüm tanımlamalar merkezi.** Kullanıcının makinesinde tek bir config dosyası. Bu araç kişisel iş akışının parçası, projenin parçası değil.
-3. **Push edilmez.** Araç dependent repoda commit atar, asla push etmez. Push kararı her zaman kullanıcıda.
-4. **Boştayken sıfır maliyet.** Polling yok. Dosya izleme FSEvents üzerinden event-driven olmalı. `usePolling` asla açılmaz.
-5. **Graph elle yazılmaz.** Kullanıcı sadece repo yollarını tanımlar; paket adları ve aralarındaki bağımlılık ilişkisi `package.json`'lardan çıkarılır.
+1. **Yönetilen repolar hiçbir şekilde değiştirilmez.** Repolara özel config dosyası, githook veya gereksiz dependency eklenmez. `@sqaft/updeps-cli` onların varlığından haberdardır, projeler bu araçtan habersizdir.
+2. **Tüm tanımlamalar merkezi.** Kullanıcının makinesinde tek bir config dosyası (`~/.config/sqaft-updeps/config.json`).
+3. **Yapılandırılabilir Push (Varsayılan: `false`).** Güvenlik gereği varsayılan olarak commit atılır ama push edilmez. Geliştirici isterse konfigürasyondan `push: true` yaparak otomatik push'u aktif edebilir.
+4. **Boştayken sıfır maliyet.** Polling yok. Git reflog dosyaları `chokidar` (FSEvents) üzerinden event-driven izlenir.
+5. **Dil ve Paket Yöneticisi Bağımsızlığı.** Yalnızca Node.js değil; npm, pnpm, yarn, cargo, pip, poetry, go mod, composer vb. tüm paket yöneticileriyle çalışabilir. Her hedef paket için çalıştırılacak komutlar (`commands`) kullanıcı tarafından belirlenir.
+6. **Açık Bağımlılık Haritası (Explicit Dependencies).** Paketler arası bağımlılıklar ve tetikleme ilişkileri `config.json` içinde doğrudan geliştirici tarafından tanımlanır; karmaşık dosya içi otomatik arama ve tahmin mekanizmalarına gerek duyulmaz.
 
 ---
 
 ## Teknoloji
 
-- **Node.js 22+**, saf ESM JavaScript. **TypeScript kullanma. Build adımı olmasın.** `bin/pkgsync.js` doğrudan çalışsın.
+- **Node.js 22+**, saf ESM JavaScript. **TypeScript kullanma. Build adımı olmasın.** `bin/updeps.js` doğrudan çalışsın.
 - Tip ipuçları gerekiyorsa JSDoc yorumları kullan.
 - **Bağımlılık minimum.** Tek kabul edilebilir dış bağımlılık: dosya izleme için `chokidar`. Argüman ayrıştırma için Node'un yerleşik `util.parseArgs`'ı, renkli çıktı için `util.styleText` kullan. `commander`, `chalk`, `yargs`, `execa` gibi paketler ekleme.
-- Kurulum: `npm link` veya `npm i -g <path>`. **npm'e yayınlanmayacak.**
-- Kod okunabilir ve yorumlu olsun; bu araç bakımını kullanıcının kendisinin yapacağı bir şey.
+- Kurulum: `npm link` veya `npm i -g .`
+- CLI komut adları: `updeps` (varsayılan) ve `sqaft-updeps`.
 
 ---
 
-## Dosya konumları
+## Dosya Konumları
 
 ```
-~/.config/pkgsync/config.json          # tanımlamalar (kullanıcı düzenler)
-~/.local/state/pkgsync/state.json      # runtime durumu (araç yazar)
-~/.local/state/pkgsync/locks/          # hedef repo kilitleri
-~/.local/state/pkgsync/logs/pkgsync.log
-~/Library/LaunchAgents/com.pkgsync.daemon.plist
+~/.config/sqaft-updeps/config.json          # tanımlamalar (kullanıcı düzenler)
+~/.local/state/sqaft-updeps/state.json      # runtime durumu (araç yazar)
+~/.local/state/sqaft-updeps/locks/          # hedef repo kilitleri (mkdir tabanlı)
+~/.local/state/sqaft-updeps/logs/updeps.log # log dosyası
+~/Library/LaunchAgents/com.sqaft.updeps.daemon.plist
 ```
 
 XDG değişkenleri (`XDG_CONFIG_HOME`, `XDG_STATE_HOME`) tanımlıysa onlara saygı göster.
 
 ---
 
-## Config şeması
+## Config Şeması
 
 ```json
 {
   "repos": [
-    { "path": "~/Projects/acme/core" },
-    { "path": "~/Projects/acme/client" },
     {
-      "path": "~/Work/clients/beta/dashboard",
-      "triggers": ["push", "fetch"],
-      "branches": ["main", "develop"],
-      "commands": [
-        "npm update {pkgs} --no-audit --no-fund",
-        "npm run build"
+      "path": "~/workspace/http",
+      "name": "http",
+      "packages": [
+        {
+          "path": "~/workspace/client",
+          "name": "client",
+          "triggers": ["push", "fetch"],
+          "branches": ["main", "develop"],
+          "commands": [
+            "npm update {pkgs} --no-audit --no-fund",
+            "npm run build"
+          ],
+          "commitMessage": "chore(deps): bump {bumps}",
+          "push": false,
+          "commandTimeout": 300
+        }
       ]
     }
   ],
@@ -68,42 +75,35 @@ XDG değişkenleri (`XDG_CONFIG_HOME`, `XDG_STATE_HOME`) tanımlıysa onlara say
     "commandTimeout": 300,
     "debounceMs": 3000,
     "maxConcurrent": 3,
-    "staleLockSec": 900
+    "staleLockSec": 900,
+    "push": false
   },
-  "exclude": [["@acme/core", "@beta/dashboard"]],
-  "extraEdges": [["@acme/core", "@legacy/thing"]],
   "notifications": true
 }
 ```
 
-- `repos[].path` dışındaki her alan opsiyonel, `defaults`'tan miras alır.
-- `branches` verilmezse repo'nun default branch'i kullanılır (`git symbolic-ref refs/remotes/origin/HEAD`, bulunamazsa `main`).
-- `exclude`: `[kaynak, hedef]` çiftleri, otomatik çıkarılan graph'tan bu kenarı siler.
-- `extraEdges`: `package.json`'dan çıkarılamayan kenarları elle ekler.
-- `~` genişletmesi her yolda desteklenmeli.
-- Config bozuksa net hata mesajı ver, hangi alanın sorunlu olduğunu söyle. Şema doğrulaması elle yazılsın, `zod` vb. ekleme.
+- `repos[].path`: İzlenen kaynak repo yolu. `~` genişletmesi desteklenir.
+- `repos[].name`: Kaynak repo/paket adı (opsiyonel, verilmezse klasör adı).
+- `repos[].packages`: Kaynak repoda değişiklik olduğunda tetiklenecek hedef projeler.
+  - `path`: Hedef repo yolu (zorunlu).
+  - `name`: Hedef repo adı (opsiyonel, verilmezse klasör adı).
+  - `triggers`: Olay listesi (`defaults.triggers`'tan miras alır).
+  - `branches`: Kaynak repoda izlenecek branch'ler (`defaults` veya kaynak reponun varsayılan branch'i).
+  - `commands`: Hedef dizinde sırayla çalıştırılacak komutlar (`defaults.commands`'tan miras alır).
+  - `commitMessage`: Commit mesaj şablonu (`defaults.commitMessage`'tan miras alır).
+  - `push`: Commit sonrası `git push` yapılsın mı (`defaults.push`'tan miras alır, varsayılan `false`).
+  - `commandTimeout`: Komut zaman aşımı süresi saniye (`defaults.commandTimeout`'tan miras alır).
+- Config bozuksa net hata mesajı ver, hangi alanın sorunlu olduğunu söyle. Şema doğrulaması elle yazılsın (`zod` vb. ekleme).
 
-**Komut şablonu değişkenleri:**
-- `{pkgs}` — güncellenecek paketlerin boşlukla ayrılmış listesi
+**Komut ve Commit Şablonu Değişkenleri:**
 - `{pkg}` — tetikleyen paketin adı
-- `{sha}` — tetikleyen paketin yeni SHA'sı (kısa)
-- `{repoPath}` — hedef repo yolu
-- `{branch}` — hedef repo'nun aktif branch'i
-- `{bumps}` — commit mesajı için, `@acme/core@a3f9c21, @acme/client@b7e2d10` formatında
-
----
-
-## Graph çıkarımı
-
-Her kayıtlı repo için `package.json` okunur:
-- `name` → paket adı
-- `dependencies`, `devDependencies`, `optionalDependencies`, `peerDependencies` içinde başka bir **kayıtlı** paketin adı geçiyorsa kenar oluşur
-
-**Metin araması yapma, JSON parse et.** (Mevcut çözümde `grep -qF "\"$pkg_name\""` kullanılıyordu, isim benzerliğinde yanlış eşleşiyor.)
-
-Sonra `exclude` çıkarılır, `extraEdges` eklenir. Cycle tespit edilirse uyar ve kenarı kırarak devam et, çökme.
-
-`package.json`'ı okunamayan veya `name` alanı olmayan repo için net uyarı ver, sessizce atlama.
+- `{pkgs}` — güncellenen paket(ler)in listesi
+- `{sha}` — tetikleyen paketin yeni kısa SHA'sı
+- `{bumps}` — commit mesajı için hazır özet (örn. `http@3b4f1a2`)
+- `{sourcePath}` — tetikleyen kaynak repo yolu
+- `{targetPath}` / `{repoPath}` — hedef repo yolu
+- `{sourceBranch}` — tetikleyen kaynak branch
+- `{targetBranch}` / `{branch}` — hedef reponun aktif branch'i
 
 ---
 
@@ -117,183 +117,118 @@ Git reflog dosyaları izlenir ve son satırdaki işlem mesajına bakılarak olay
 | `fetch` | `.git/logs/refs/remotes/<remote>/<branch>` | `fetch ...` |
 | `commit` | `.git/logs/refs/heads/<branch>` | `commit`, `commit (amend)`, `commit (initial)` |
 | `merge` | `.git/logs/refs/heads/<branch>` | `merge ...`, `pull ...` |
-| `checkout` | `.git/logs/HEAD` | `checkout: moving from ... to ...` |
-| `manual` | — | sadece `pkgsync run` |
+| `manual` | — | sadece `updeps run` |
 
 Reflog satır formatı:
 ```
 <eski-sha> <yeni-sha> Ad <mail> <unix-ts> <tz>\t<mesaj>
 ```
-Yeni SHA ve mesaj bu satırdan alınır, ayrı bir git çağrısına gerek yok.
+Yeni SHA ve mesaj bu satırdan alınır, ayrı bir git çağrısına gerek kalmaz.
 
-**Bilinmesi gerekenler:**
-- `git pull` remote-tracking ref'i fetch adımıyla günceller, yani orada `fetch ...` olarak görünür. `pull`'u ayrı bir tetikleyici olarak sunma; `fetch` "uzaktan yeni bir şey geldi" anlamına gelsin.
-- `commit` tetikleyicisi git dependency'ler için işe yaramaz (lokal commit henüz remote'ta değil, `npm update` göremez). `file:` bağımlılıkları veya özel build komutları için anlamlı. `doctor` bu kombinasyonu tespit edip uyarsın.
-- Reflog varsayılan olarak açıktır ama `core.logAllRefUpdates` kapatılmış olabilir. `doctor` kontrol etsin.
-
-**Tekrar işleme koruması zorunlu:** `state.json`'da repo başına son işlenen SHA tutulur. Aynı SHA tekrar gelirse sessizce atlanır. Aynı repoda hem `push` hem `fetch` tanımlıysa bu koruma olmadan çift çalışma olur.
+**Tekrar işleme koruması zorunlu:** `state.json`'da repo başına son işlenen SHA tutulur. Aynı SHA tekrar gelirse sessizce atlanır.
 
 ---
 
 ## Daemon
 
-- `chokidar` ile, kayıtlı repoların **sadece ilgili reflog dosyaları** izlenir. Repo kökünü recursive izleme, `node_modules` olay yağmuru yaratır.
-- İzlenecek path listesi config'teki `triggers` değerlerinden türetilir; hiçbir repoda `checkout` yoksa `.git/logs/HEAD` hiç izlenmez.
-- Config değişince daemon izleme listesini yeniden kursun (config dosyasının kendisi de izlensin).
-- launchd agent olarak çalışır. `pkgsync start` plist'i üretip `launchctl bootstrap` yapsın; `stop`, `restart`, `daemon-status` komutları olsun.
-- Daemon çökerse launchd `KeepAlive` ile yeniden başlatsın.
-- Tek instance garantisi: PID dosyası veya lock.
+- `chokidar` ile, kayıtlı repoların **sadece ilgili reflog dosyaları** izlenir. Repo kökünü recursive izleme yapılmaz.
+- İzlenecek path listesi config'teki `triggers` ve `branches` değerlerinden türetilir.
+- Config değişince daemon izleme listesini yeniden kurar (config dosyasının kendisi de izlenir).
+- launchd agent olarak çalışır (`updeps start`, `stop`, `restart`, `daemon-status`).
+- Daemon çökerse launchd `KeepAlive` ile yeniden başlatır.
+- Tek instance garantisi: PID dosyası/kilidi.
 
 ---
 
 ## Runner
 
-Bir kaynak paket için tetikleme geldiğinde:
+Bir kaynak repo için tetikleme geldiğinde:
 
-1. Graph'tan dependent'lar bulunur, **topolojik sırayla** işlenir.
-2. Her hedef repo için debounce penceresi (`debounceMs`) uygulanır; art arda gelen tetiklemeler birleştirilir.
-3. Hedef repo başına merkezi kilit alınır (`~/.local/state/pkgsync/locks/<path-hash>`). `mkdir` tabanlı atomik kilit. `staleLockSec`'ten eski kilitler bayat sayılıp temizlenir. Kilit dizini içine PID ve zaman damgası yaz, teşhis için.
+1. Bu kaynağa bağlı hedef paketler (`packages`) listelenir.
+2. Hedef repolar için debounce penceresi (`debounceMs`) uygulanır; art arda gelen tetiklemeler birleştirilir.
+3. Hedef repo başına merkezi kilit alınır (`~/.local/state/sqaft-updeps/locks/<path-hash>`). `mkdir` tabanlı atomik kilit. `staleLockSec`'ten eski kilitler temizlenir. Kilit içine PID ve timestamp yazılır.
 4. Aynı anda en fazla `maxConcurrent` hedef işlenir.
 
-**Ön kontroller** (herhangi biri başarısızsa atla ve raporla, asla zorlama):
-- Yol var mı, git repo'su mu
-- Rebase/merge/cherry-pick ortasında mı (`.git/rebase-merge`, `.git/rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`)
-- Aktif branch, izin verilen `branches` listesinde mi
-- Working tree temiz mi (`package-lock.json` hariç). **Asla stash'leme.**
-- `node_modules` var mı; yoksa `npm update` yerine `npm install` gerekir
+**Ön kontroller** (başarısızsa atla ve uyar):
+- Hedef dizin var mı, geçerli bir git reposu mu?
+- Rebase/merge/cherry-pick ortasında mı (`.git/rebase-merge`, `MERGE_HEAD` vb.)?
+- Working tree temiz mi? (Kullanıcının kaydedilmemiş değişikliklerini bozmamak için çalışma dizini kirliyse atla).
 
-**Güncelleme:**
-- Hedefin `package-lock.json`'ında geçen **tüm kayıtlı paketleri** topla ve tek `npm update` çağrısında birlikte güncelle. Sadece tetikleyen paketi güncellersen npm nested/transitive kopyaları kendi HEAD'lerinden bağımsız çözer ve repolar arası SHA tutarsızlığı çıkar. (Bu, mevcut çözümdeki en değerli bulgu.)
-- Lockfile'ı JSON olarak parse et: `packages["node_modules/<name>"].resolved` alanı `git+ssh://...#<sha>` formatında, SHA oradan alınır. Regex/grep kullanma, lockfile v2/v3 farkı var.
+**Çalıştırma:**
+- Hedef dizinde sırayla `commands` çalıştırılır (değişkenler dinamik doldurulur).
+- Herhangi bir komut hata verirse (`exit != 0` veya zaman aşımı):
+  - Hata loglanır.
+  - O adımda yapılmış olabilecek değişiklikler geri alınır (`git reset --hard HEAD` / `git clean -fd`).
+  - Kilit serbest bırakılır ve işlem sonlandırılır.
 
-**Git spec tespiti:**
-- `github:org/repo`, `#main`, `#semver:^1.0.0` → `npm update` SHA'yı ilerletir, sorun yok.
-- `#<40 karakter sha>` (sabit pin) → `npm update` **ilerletmez**. Bu durumu tespit et, o paketi atla ve kullanıcıya "sabit SHA'ya pinlenmiş, otomatik güncellenemez" uyarısı ver. `doctor` da bunu raporlasın.
-
-**Sonuç:**
-- `package-lock.json` değişmediyse "güncel" say, commit atma.
-- Değiştiyse config'teki `commitMessage` şablonuyla **sadece `package-lock.json`'ı** commit et. Başka dosya commit'e girmesin.
-- Herhangi bir komut başarısız olursa `git checkout -- package-lock.json` ile geri al.
-- `commandTimeout` aşılırsa süreci öldür, hata say.
-- `--dry-run`: değişikliği hesapla, göster, commit etme, lockfile'ı geri al.
+**Sonuç & Commit/Push:**
+- Komutlar başarılı bittikten sonra `git status --porcelain` kontrol edilir:
+  - Değişiklik yoksa "güncel (unchanged)" sayılır, commit atılmaz.
+  - Değişiklik varsa:
+    - `git add -A`
+    - `git commit -m "<commitMessage>"`
+    - Eğer hedef için `push: true` ise:
+      - `git push` çalıştırılır.
+      - Push başarısız olursa hata loglanır ve kullanıcıya bildirilir.
+- `state.json` güncellenir.
+- Kilit serbest bırakılır.
+- `--dry-run`: Komutları çalıştırır veya simüle eder, dosya değişikliklerini gösterir, commit atmaz ve değişiklikleri geri alır.
 
 ---
 
-## State dosyası
+## State Dosyası
 
-`state.json` şu bilgileri tutsun (menü çubuğu ve `status` bunu okur, kendisi hesaplama yapmaz):
-
+`state.json` şu bilgileri tutar:
 - Repo başına son işlenen SHA ve zaman damgası
-- Repo başına **push bekleyen commit sayısı** (`git rev-list --count @{u}..HEAD`, her çalışma sonunda hesaplanıp yazılır) ve son bump commit'inin mesajı
-- Son çalışma özetleri: kaynak paket, commit/değişmedi/hata sayıları, zaman
-- Daemon durumu: PID, başlangıç zamanı, izlenen repo sayısı
+- Repo başına push bekleyen commit sayısı (`git rev-list --count @{u}..HEAD`) ve son commit mesajı
+- Son çalışma özetleri (kaynak repo, hedef paketler, commit/güncel/hata sayıları, zaman)
+- Daemon durumu (PID, başlangıç zamanı, izlenen repo sayısı)
 - Son hatalar
 
-Atomik yazım (temp dosya + rename) kullan, yarım yazılmış state okunmasın.
+Atomik yazım (temp dosya + rename) kullanılır.
 
 ---
 
 ## Bildirimler
 
-- Kaynak paket başına **tek özet bildirim**. 10 dependent için 10 bildirim atma.
-- `terminal-notifier` varsa onu kullan (tıklanabilir, log açılabilir); yoksa `osascript` ile `display notification`'a düş; ikisi de yoksa sessizce atla.
-- Başarı ve hata için farklı ses/başlık. Mevcut çözümdeki `Glass` / `Basso` ayrımı iyi çalışıyordu.
-- `notifications: false` ile tamamen kapatılabilsin.
+- Kaynak repo başına **tek özet bildirim**.
+- `terminal-notifier` varsa öncelikli kullanılır, yoksa `osascript` (`display notification`), ikisi de yoksa sessizce atlanır.
+- Başarı (`Glass`) ve hata (`Basso`) için farklı ses/başlık.
+- `notifications: false` ile tamamen kapatılabilir.
 
 ---
 
-## Menü çubuğu (SwiftBar / xbar)
+## Menü Çubuğu (SwiftBar / xbar)
 
-`pkgsync menubar` komutu, plugin çıktısını üretir.
-
-**Kritik kural:** Bu komut **hiçbir iş yapmaz**. Git çağırmaz, repo taramaz, sadece `state.json`'ı okuyup formatlar. 30 saniyede bir 20 repoda git çalıştırmak kabul edilemez.
-
-Çıktı formatı:
-
-```
-⇡2
----
-Push bekleyen (2)
-  @acme/client · 1 commit · 2s önce | bash=... param1=open param2=~/Projects/acme/client
-  @acme/app · 1 commit · 2s önce
----
-Son çalışma: @acme/core
-  2 commit, 1 değişmedi, 0 hata · 14:32
----
-Drift kontrolü çalıştır | bash=<pkgsync-yolu> param1=check terminal=false refresh=true
-Logları aç | bash=...
----
-Daemon: çalışıyor (12 repo)
-Duraklat | bash=...
-```
-
-- İkon durumları: boşta sade, bekleyen varsa `⇡N`, hata varsa `⚠`.
-- SwiftBar SF Symbols destekliyor (`| sfimage=`), xbar desteklemiyor. İkisiyle uyumlu kal, emoji/metin fallback koy.
-- `pkgsync menubar --install` plugin dosyasını `~/Library/Application Support/SwiftBar/pkgsync.30s.sh` konumuna yazsın; SwiftBar kurulu değilse nasıl kurulacağını söylesin.
-- Bir çalışma bittiğinde daemon `open -g "swiftbar://refreshplugin?name=pkgsync"` göndersin ki menü anında güncellensin.
+`updeps menubar` komutu:
+- Yalnızca `state.json`'ı okur ve hızlıca formatlar (hiçbir git çağrısı yapmaz).
+- Bekleyen push sayısını (`⇡N`), son çalışma özetini, daemon durumunu gösterir.
+- `updeps menubar --install` SwiftBar eklentisi olarak kurar.
+- Bir çalışma bittiğinde daemon `open -g "swiftbar://refreshplugin?name=updeps"` tetikler.
 
 ---
 
-## CLI komutları
+## CLI Komutları
 
-| Komut | İş |
+| Komut | İşlem |
 |---|---|
-| `pkgsync scan <dizin...>` | Dizinleri gezip `.git` + `package.json` olan repoları bulur, aralarındaki ilişkiyi gösterir, hangilerinin ekleneceğini sorar. `node_modules` ve `.git` içine girmez, derinlik sınırı olsun. İlişkisiz repoları varsayılan olarak dışarıda bırakır. Tekrar çalıştırıldığında sadece yenileri sorar. |
-| `pkgsync add <path>` | Tek repo ekler |
-| `pkgsync remove <path\|paket>` | Kaydı siler |
-| `pkgsync list` | Kayıtlı repolar, paket adları, tetikleyiciler |
-| `pkgsync graph` | ASCII bağımlılık ağacı |
-| `pkgsync status` | Asıl arayüz: daemon durumu, push bekleyenler, son çalışma özeti |
-| `pkgsync check` | Drift raporu: her dependent'ın lockfile'daki SHA'sını kaynak paketin remote HEAD'iyle karşılaştırır (`git ls-remote`), geride kalanları listeler. Hiçbir şeyi değiştirmez. |
-| `pkgsync run <paket> [--dry-run]` | Elle tetikleme |
-| `pkgsync logs [--follow]` | Log tail |
-| `pkgsync start` / `stop` / `restart` | launchd agent yönetimi |
-| `pkgsync doctor` | Sağlık kontrolü |
-| `pkgsync menubar [--install]` | SwiftBar plugin çıktısı / kurulumu |
-
-**`doctor` neleri kontrol etsin:**
-- Kayıtlı yollar hâlâ yerinde mi, hâlâ git repo'su mu
-- `package.json`'daki paket adları config'te varsayılanla eşleşiyor mu (paket yeniden adlandırılmış olabilir)
-- Reflog açık mı (`core.logAllRefUpdates`)
-- Daemon ayakta mı, plist yerinde mi
-- Sabit SHA'ya pinlenmiş git dependency'ler var mı
-- `commit` tetikleyicisi tanımlı ama repo git dependency kullanıyor mu (anlamsız kombinasyon uyarısı)
-- Bayat kilit dosyaları var mı
-- `terminal-notifier` / SwiftBar kurulu mu
+| `updeps init` | Örnek bir `config.json` dosyası oluşturur |
+| `updeps list` | Kayıtlı kaynak repoları ve altlarındaki hedef paketleri listeler |
+| `updeps add <kaynak-path> --target <hedef-path>` | Konfigürasyona yeni kaynak/hedef ilişkisi ekler |
+| `updeps remove <kaynak-path> [hedef-path]` | Kaydı siler |
+| `updeps graph` | Tanımlı ilişkilerin ASCII bağımlılık ağacını çizer |
+| `updeps status` | Daemon durumu, bekleyen push'lar ve son çalışma özeti |
+| `updeps run [kaynak] [--dry-run]` | Manuel tetikleme çalıştırır |
+| `updeps logs [--follow]` | Logları görüntüler |
+| `updeps start` / `stop` / `restart` | launchd daemon kontrolü |
+| `updeps doctor` | Sistem sağlık kontrolü (yollar, git repoları, reflog durumu, komutların varlığı) |
+| `updeps menubar [--install]` | SwiftBar / xbar eklenti çıktısı ve kurulumu |
 
 ---
 
-## Loglama
+## Geliştirme Sırası
 
-- Merkezi log dosyası, satır başına zaman damgası ve seviye.
-- Komut çıktıları (stdout/stderr) log'a yazılsın, hata ayıklama için gerekli.
-- Basit boyut tabanlı rotasyon (örn. 5 MB, 3 dosya).
-
----
-
-## Geliştirme sırası
-
-Her aşamayı tamamlayıp bana göstererek ilerle, hepsini bir seferde yazma.
-
-1. **Çekirdek:** config okuma/doğrulama, repo kaydı, graph çıkarımı, `add` / `remove` / `list` / `graph` / `scan`
-2. **Runner:** ön kontroller, kilit, npm güncelleme, lockfile parse, commit, `run --dry-run`, loglama, state yazımı
-3. **Daemon:** reflog izleme, tetikleyici sınıflandırma, debounce, tekrar işleme koruması, launchd agent, bildirimler
-4. **Görünürlük:** `status`, `check`, `doctor`, `logs`, menü çubuğu plugin'i
-
----
-
-## Referans: mevcut çözüm
-
-Kullanıcı şu an tek bir workspace içinde çalışan bir `pre-push` hook'u kullanıyor (dosyayı ekleyebilir). Yeni araç onun yerini alacak. Taşınması gereken kazanımlar:
-
-- Hedef repo başına kilit, bayat kilit temizliği
-- Hedefte mevcut tüm iç paketleri tek `npm update` çağrısında toplama
-- `--dry-run` modu
-- Push edilmeden commit atma davranışı
-- Başarı/hata için ayrı bildirim sesi
-
-Bırakılacaklar:
-- `workspace = repo'nun üst dizini` varsayımı (tüm sorunun kaynağı)
-- `grep` ile package.json içinde isim arama
-- `pre-push` + arka planda `git ls-remote` polling ile push doğrulama (reflog zaten kesin sinyal veriyor)
-- Repo başına hook kurulumu ve `prepare` script'i bağımlılığı
+1. **Çekirdek (Core):** `package.json`, CLI router (`bin/updeps.js`), config yükleme ve doğrulama (`src/config.js`), bağımlılık haritası (`src/graph.js`), `init`, `list`, `graph`.
+2. **Runner Motoru:** Hedef repo kilit mekanizması (`src/lock.js`), komut yürütme & şablon değişkenleri (`src/runner.js`), diff & commit & opsiyonel push akışı, `state.json` yazıcı (`src/state.js`), `logger.js`, `updeps run [--dry-run]`.
+3. **Daemon & Tetikleyiciler:** Reflog izleyici (`src/watcher.js`), olay sınıflandırıcı (`src/classifier.js`), kuyruk ve debounce (`src/queue.js`), bildirimler (`src/notify.js`), launchd plist yönetimi (`src/daemon.js`).
+4. **Görünürlük & Teşhis:** `status`, `doctor`, `logs`, `menubar` eklentisi.
