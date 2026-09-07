@@ -86,8 +86,8 @@ updeps init
     "commitMessage": "chore(deps): bump {bumps}",
     "commandTimeout": 300,
     "debounceMs": 3000,
-    "maxConcurrent": 3,
-    "globalMaxConcurrent": 3,
+    "maxConcurrent": 0,
+    "globalMaxConcurrent": 0,
     "staleLockSec": 900,
     "waitTimeoutSec": 0,
     "push": false
@@ -96,8 +96,9 @@ updeps init
 }
 ```
 
+- **`maxConcurrent`** (varsayılan `0`): Bir kaynak repo altında aynı anda güncellenebilecek maksimum hedef sayısı. `0` = limitsiz (tüm hedefler paralel çalışır).
+- **`globalMaxConcurrent`** (varsayılan `0`): Sistem genelinde aynı anda işlenebilecek maksimum kaynak repo sayısı. `0` = limitsiz (tüm kaynak repolar eşzamanlı çalışır).
 - **`waitTimeoutSec`** (varsayılan `0`): Hedef repo başka bir işlem tarafından kilitliyse beklenecek maksimum süre (saniye). `0` değeri zaman aşımını kapatır (kilit serbest kalana kadar sınırsız bekler).
-- **`globalMaxConcurrent`** (varsayılan `3`): Tüm sistemde aynı anda işlenebilecek maksimum kaynak repo sayısı. Aynı anda 10-15 repo push edildiğinde sistem kaynaklarının tükenmesini ve Yarn/npm cache çakışmalarını engeller.
 
 ### Şablon Değişkenleri
 

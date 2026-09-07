@@ -55,4 +55,51 @@ describe('UpdateQueue Concurrency & Drain', () => {
     assert.ok(maxActiveSeen <= 2, `maxActiveSeen (${maxActiveSeen}) exceeded globalMaxConcurrent (2)`);
     assert.equal(maxActiveSeen, 2);
   });
+
+  it('runs all repos concurrently when globalMaxConcurrent is 0 (unlimited)', async () => {
+    const config = {
+      defaults: {
+        debounceMs: 50,
+        globalMaxConcurrent: 0
+      },
+      repos: []
+    };
+
+    const queue = new UpdateQueue(config);
+
+    let activeCount = 0;
+    let maxActiveSeen = 0;
+    const completed = [];
+
+    queue.process = async function (repoPath) {
+      this.runningRepos.add(repoPath);
+      activeCount++;
+      if (activeCount > maxActiveSeen) {
+        maxActiveSeen = activeCount;
+      }
+
+      await new Promise(r => setTimeout(r, 60));
+
+      activeCount--;
+      completed.push(repoPath);
+      this.runningRepos.delete(repoPath);
+      this.drain();
+    };
+
+    for (let i = 1; i <= 5; i++) {
+      queue.enqueue({ name: `repo-${i}`, path: `/tmp/repo-${i}` }, { trigger: 'push', sha: `sha-${i}` });
+    }
+
+    await new Promise(r => {
+      const check = setInterval(() => {
+        if (completed.length === 5) {
+          clearInterval(check);
+          r();
+        }
+      }, 20);
+    });
+
+    assert.equal(completed.length, 5);
+    assert.equal(maxActiveSeen, 5);
+  });
 });

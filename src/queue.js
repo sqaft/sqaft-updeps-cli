@@ -65,12 +65,16 @@ export class UpdateQueue {
   }
 
   /**
-   * Drains the ready queue respecting globalMaxConcurrent limit.
+   * Drains the ready queue respecting globalMaxConcurrent limit (0 = unlimited).
    */
   drain() {
-    const globalMaxConcurrent = this.config.defaults?.globalMaxConcurrent ?? 3;
+    const globalMaxConcurrent = this.config.defaults?.globalMaxConcurrent ?? 0;
 
-    while (this.runningRepos.size < globalMaxConcurrent && this.readyQueue.length > 0) {
+    while (this.readyQueue.length > 0) {
+      if (globalMaxConcurrent > 0 && this.runningRepos.size >= globalMaxConcurrent) {
+        break;
+      }
+
       // Find the first repo in readyQueue that is not currently running
       const nextIndex = this.readyQueue.findIndex(r => !this.runningRepos.has(r));
       if (nextIndex === -1) {

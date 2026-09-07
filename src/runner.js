@@ -358,10 +358,12 @@ export async function runSourceRepo({ config, sourceRepo, triggerContext, dryRun
     return { committed: 0, unchanged: 0, failed: 0, skipped: 0, results: [] };
   }
 
-  const maxConcurrent = config.defaults?.maxConcurrent || 3;
+  const maxConcurrent = sourceRepo.maxConcurrent !== undefined
+    ? sourceRepo.maxConcurrent
+    : (config.defaults?.maxConcurrent ?? 1);
   const results = [];
 
-  // Throttled concurrency execution
+  // Concurrency execution (0 means unlimited / all targets run in parallel)
   let index = 0;
   async function worker() {
     while (index < targets.length) {
@@ -377,7 +379,7 @@ export async function runSourceRepo({ config, sourceRepo, triggerContext, dryRun
     }
   }
 
-  const workerCount = Math.min(maxConcurrent, targets.length);
+  const workerCount = (maxConcurrent > 0) ? Math.min(maxConcurrent, targets.length) : targets.length;
   const workers = Array.from({ length: workerCount }, () => worker());
   await Promise.all(workers);
 

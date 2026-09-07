@@ -8,8 +8,8 @@ export const DEFAULT_CONFIG_VALUES = {
   commitMessage: 'chore(deps): bump {bumps}',
   commandTimeout: 300,
   debounceMs: 3000,
-  maxConcurrent: 3,
-  globalMaxConcurrent: 3,
+  maxConcurrent: 1,
+  globalMaxConcurrent: 0,
   staleLockSec: 900,
   waitTimeoutSec: 0,
   push: false
@@ -49,11 +49,11 @@ export function validateConfig(raw) {
     if (d.debounceMs !== undefined && (typeof d.debounceMs !== 'number' || d.debounceMs < 0)) {
       throw new Error('"defaults.debounceMs" pozitif bir sayı olmalıdır.');
     }
-    if (d.maxConcurrent !== undefined && (typeof d.maxConcurrent !== 'number' || d.maxConcurrent <= 0)) {
-      throw new Error('"defaults.maxConcurrent" pozitif bir sayı olmalıdır.');
+    if (d.maxConcurrent !== undefined && (typeof d.maxConcurrent !== 'number' || d.maxConcurrent < 0)) {
+      throw new Error('"defaults.maxConcurrent" 0 veya pozitif bir sayı olmalıdır.');
     }
-    if (d.globalMaxConcurrent !== undefined && (typeof d.globalMaxConcurrent !== 'number' || d.globalMaxConcurrent <= 0)) {
-      throw new Error('"defaults.globalMaxConcurrent" pozitif bir sayı olmalıdır.');
+    if (d.globalMaxConcurrent !== undefined && (typeof d.globalMaxConcurrent !== 'number' || d.globalMaxConcurrent < 0)) {
+      throw new Error('"defaults.globalMaxConcurrent" 0 veya pozitif bir sayı olmalıdır.');
     }
     if (d.staleLockSec !== undefined && (typeof d.staleLockSec !== 'number' || d.staleLockSec <= 0)) {
       throw new Error('"defaults.staleLockSec" pozitif bir sayı olmalıdır.');
@@ -80,6 +80,9 @@ export function validateConfig(raw) {
       }
       if (repo.name !== undefined && typeof repo.name !== 'string') {
         throw new Error(`repos[${rIndex}].name bir metin olmalıdır.`);
+      }
+      if (repo.maxConcurrent !== undefined && (typeof repo.maxConcurrent !== 'number' || repo.maxConcurrent < 0)) {
+        throw new Error(`repos[${rIndex}].maxConcurrent 0 veya pozitif bir sayı olmalıdır.`);
       }
 
       if (repo.packages !== undefined) {
@@ -165,10 +168,13 @@ export function resolveConfig(raw) {
       };
     });
 
+    const repoMaxConcurrent = repo.maxConcurrent !== undefined ? repo.maxConcurrent : defaults.maxConcurrent;
+
     return {
       path: resolvedRepoPath,
       rawPath: repo.path,
       name: repoName,
+      maxConcurrent: repoMaxConcurrent,
       packages
     };
   });
@@ -244,7 +250,7 @@ export function createDefaultConfig() {
       commitMessage: 'chore(deps): bump {bumps}',
       commandTimeout: 300,
       debounceMs: 3000,
-      maxConcurrent: 3,
+      maxConcurrent: 1,
       globalMaxConcurrent: 3,
       staleLockSec: 900,
       waitTimeoutSec: 0,

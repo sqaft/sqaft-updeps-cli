@@ -89,8 +89,9 @@ describe('Config Validation & Resolution', () => {
     assert.throws(() => validateConfig({ repos: [{}] }), /path zorunludur/);
     assert.throws(() => validateConfig({ defaults: { push: 'yes' } }), /boolean/);
     assert.throws(() => validateConfig({ defaults: { commandTimeout: -10 } }), /pozitif bir sayı/);
-    assert.throws(() => validateConfig({ defaults: { globalMaxConcurrent: 0 } }), /pozitif bir sayı/);
-    assert.throws(() => validateConfig({ defaults: { waitTimeoutSec: -5 } }), /0 veya pozitif bir sayı/);
+    assert.throws(() => validateConfig({ defaults: { maxConcurrent: -1 } }), /0 veya pozitif bir sayı/);
+    assert.throws(() => validateConfig({ defaults: { globalMaxConcurrent: -1 } }), /0 veya pozitif bir sayı/);
+    assert.throws(() => validateConfig({ repos: [{ path: '/tmp/r', maxConcurrent: -1 }] }), /0 veya pozitif bir sayı/);
     assert.throws(() => validateConfig({ repos: [{ path: '/tmp/r', packages: [{ path: '/tmp/p', waitTimeoutSec: -1 }] }] }), /0 veya pozitif bir sayı/);
   });
 
@@ -99,21 +100,32 @@ describe('Config Validation & Resolution', () => {
       repos: [
         {
           path: '/tmp/repo-1',
+          maxConcurrent: 2,
           packages: [
             { path: '/tmp/pkg-default' },
             { path: '/tmp/pkg-custom', waitTimeoutSec: 120 }
+          ]
+        },
+        {
+          path: '/tmp/repo-2',
+          packages: [
+            { path: '/tmp/pkg-2' }
           ]
         }
       ],
       defaults: {
         globalMaxConcurrent: 5,
+        maxConcurrent: 1,
         waitTimeoutSec: 0
       }
     };
 
     const resolved = resolveConfig(raw);
     assert.equal(resolved.defaults.globalMaxConcurrent, 5);
+    assert.equal(resolved.defaults.maxConcurrent, 1);
     assert.equal(resolved.defaults.waitTimeoutSec, 0);
+    assert.equal(resolved.repos[0].maxConcurrent, 2);
+    assert.equal(resolved.repos[1].maxConcurrent, 1);
     assert.equal(resolved.repos[0].packages[0].waitTimeoutSec, 0);
     assert.equal(resolved.repos[0].packages[1].waitTimeoutSec, 120);
   });
