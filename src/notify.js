@@ -32,9 +32,10 @@ function detectTools() {
  * @param {'ok'|'fail'} options.type
  * @param {string} options.title
  * @param {string} options.message
+ * @param {string} [options.group]
  * @param {boolean} [options.enabled=true]
  */
-export function sendNotification({ type = 'ok', title, message, enabled = true }) {
+export function sendNotification({ type = 'ok', title, message, group, enabled = true }) {
   if (!enabled) return;
 
   detectTools();
@@ -45,13 +46,16 @@ export function sendNotification({ type = 'ok', title, message, enabled = true }
 
   if (hasTerminalNotifier) {
     try {
-      execFile('terminal-notifier', [
+      const args = [
         '-title', title,
         '-subtitle', subtitle,
         '-message', message,
-        '-sound', sound,
-        '-group', 'sqaft-updeps'
-      ], () => {});
+        '-sound', sound
+      ];
+      if (group) {
+        args.push('-group', group);
+      }
+      execFile('terminal-notifier', args, () => {});
       return;
     } catch {
       // Fallback to osascript
