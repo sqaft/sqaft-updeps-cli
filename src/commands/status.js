@@ -20,7 +20,7 @@ function dur(ms) {
 }
 
 function render() {
-  const { agentInstalled, daemonPid, state } = agentStatus();
+  const { agentInstalled, daemonPid, daemonStale, state } = agentStatus();
   const L = [];
 
   L.push(styleText('bold', 'Daemon'));
@@ -31,6 +31,11 @@ function render() {
   if (state.daemon?.startedAt) {
     L.push(`  başlangıç     : ${ago(state.daemon.startedAt)}`);
     L.push(`  izlenen repo  : ${state.daemon.watchedRepos}`);
+  }
+  if (daemonStale) {
+    L.push(
+      styleText('yellow', '  ⚠ kod dosyaları daemon başladıktan sonra değişti — "updeps restart" gerekli')
+    );
   }
   L.push('');
 

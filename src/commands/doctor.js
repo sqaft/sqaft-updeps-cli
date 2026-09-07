@@ -6,7 +6,7 @@ import { loadConfig } from '../config.js';
 import { git, commandExists } from '../exec.js';
 import { defaultBranch, checkPreconditions } from '../gitops.js';
 import { findCycles } from '../graph.js';
-import { runningDaemonPid } from '../daemon.js';
+import { runningDaemonPid, daemonCodeStale } from '../daemon.js';
 
 let problems = 0;
 
@@ -109,8 +109,10 @@ export function cmdDoctor() {
   console.log('');
   console.log(styleText('bold', 'Daemon'));
   const pid = runningDaemonPid();
-  if (pid) ok(`çalışıyor (pid ${pid})`);
-  else warn('çalışmıyor — "updeps start"');
+  if (pid) {
+    ok(`çalışıyor (pid ${pid})`);
+    if (daemonCodeStale()) warn('kod dosyaları daemon başladıktan sonra değişti — "updeps restart"');
+  } else warn('çalışmıyor — "updeps start"');
 
   console.log('');
   console.log(styleText('bold', 'Döngüler'));

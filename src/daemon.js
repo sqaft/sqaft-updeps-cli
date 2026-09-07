@@ -196,12 +196,57 @@ export function restartAgent() {
 }
 
 /**
- * @returns {{ agentInstalled: boolean, daemonPid: number|null, state: object }}
+ * Newest mtime (ms) across the shipped `src/` and `bin/` JS, or 0.
+ * @returns {number}
+ */
+function newestSourceMtime() {
+  let newest = 0;
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith('.js')) {
+        try {
+          newest = Math.max(newest, fs.statSync(full).mtimeMs);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  };
+  walk(fileURLToPath(new URL('.', import.meta.url)));
+  walk(fileURLToPath(new URL('../bin/', import.meta.url)));
+  return newest;
+}
+
+/**
+ * True when a daemon is running but its code was modified after it started —
+ * i.e. it is serving stale modules and needs `updeps restart`.
+ * @returns {boolean}
+ */
+export function daemonCodeStale() {
+  if (!runningDaemonPid()) return false;
+  const startedAt = loadState().daemon?.startedAt;
+  if (!startedAt) return false;
+  const newest = newestSourceMtime();
+  return newest > 0 && newest > startedAt + 2000; // 2s grace for clock skew
+}
+
+/**
+ * @returns {{ agentInstalled: boolean, daemonPid: number|null, daemonStale: boolean, state: object }}
  */
 export function agentStatus() {
   return {
     agentInstalled: fs.existsSync(LAUNCH_AGENT_PLIST),
     daemonPid: runningDaemonPid(),
+    daemonStale: daemonCodeStale(),
     state: loadState()
   };
 }
