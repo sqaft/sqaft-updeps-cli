@@ -107,40 +107,37 @@
       "path": "~/workspace/hooli/hooli-sdk",
       "name": "hooli/sdk",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update {pkgs}"] },
-        { "path": "~/workspace/hooli/hooli-billing", "name": "hooli-billing", "commands": ["composer update {pkgs}"] }
+        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-notifications",
       "name": "hooli/notifications",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update {pkgs}"] },
-        { "path": "~/workspace/hooli/hooli-billing", "name": "hooli-billing", "commands": ["composer update {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-web", "name": "umbrella-web", "commands": ["composer update {pkgs}"] }
+        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] },
+        { "path": "~/workspace/umbrella/umbrella-web", "name": "umbrella-web", "commands": ["composer update"] }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-subscriptions",
       "name": "hooli/subscriptions",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update {pkgs}"] },
-        { "path": "~/workspace/hooli/hooli-billing", "name": "hooli-billing", "commands": ["composer update {pkgs}"] }
+        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-auth",
       "name": "hooli/auth",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-web", "name": "umbrella-web", "commands": ["composer update {pkgs}"] }
+        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] },
+        { "path": "~/workspace/umbrella/umbrella-web", "name": "umbrella-web", "commands": ["composer update"] }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-billing",
       "name": "hooli/billing",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update {pkgs}"] }
+        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] }
       ]
     }
   ]
