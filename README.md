@@ -59,6 +59,12 @@ updeps status               # durum, çalışan iş + kuyruk, açık hatalar
 
 Konum: `~/.config/sqaft-updeps/config.json` (`XDG_CONFIG_HOME`'a saygılı).
 
+Daemon çalışırken bu dosyayı düzenlersen değişiklik **otomatik algılanır ve
+yeniden yüklenir** — `updeps restart` gerekmez. (Geçersiz JSON / doğrulama
+hatası olursa eski ayarlar korunur ve log'a yazılır.) `updeps init`,
+`updeps add`, `updeps remove` ile yapılan değişiklikler de aynı şekilde canlı
+uygulanır.
+
 ```jsonc
 {
   "notifications": true,

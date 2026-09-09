@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import chokidar from 'chokidar';
 import { logger } from './logger.js';
-import { CONFIG_FILE } from './paths.js';
+import { CONFIG_FILE, CONFIG_DIR } from './paths.js';
 import { readLastLine, parseReflogLine, classifyReflogEvent } from './reflog.js';
 import { defaultBranch } from './gitops.js';
 import { updateState } from './state.js';
@@ -23,6 +23,7 @@ export class ReflogWatcher {
     this.onConfigChange = onConfigChange || (() => {});
     this.watcher = null;
     this.configWatcher = null;
+    this.configReloadTimer = null;
   }
 
   /**
@@ -96,13 +97,38 @@ export class ReflogWatcher {
     this.watcher.on('add', handler);
     this.watcher.on('change', handler);
 
-    if (fs.existsSync(CONFIG_FILE)) {
-      this.configWatcher = chokidar.watch(CONFIG_FILE, { ignoreInitial: true });
-      this.configWatcher.on('change', () => {
+    this._watchConfig();
+  }
+
+  /**
+   * Watches the config file for live reload. We watch the *containing directory*
+   * rather than the file itself: `updeps init`, `add`/`remove` and most editors
+   * replace the file via an atomic rename (write temp + `rename()`), which swaps
+   * the inode and makes a single-file watch go permanently silent after the
+   * first change. Directory watching survives that; we filter down to the exact
+   * path and debounce so a rename (unlink + add) reloads only once.
+   */
+  _watchConfig() {
+    if (!fs.existsSync(CONFIG_DIR)) return;
+
+    this.configWatcher = chokidar.watch(CONFIG_DIR, {
+      ignoreInitial: true,
+      depth: 0,
+      awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
+    });
+
+    const onChange = (filePath) => {
+      if (path.resolve(filePath) !== CONFIG_FILE) return;
+      if (this.configReloadTimer) clearTimeout(this.configReloadTimer);
+      this.configReloadTimer = setTimeout(() => {
+        this.configReloadTimer = null;
         logger.info('Konfigürasyon değişti, yeniden yükleniyor...');
         this.onConfigChange();
-      });
-    }
+      }, 100);
+    };
+
+    this.configWatcher.on('add', onChange);
+    this.configWatcher.on('change', onChange);
   }
 
   /** @param {string} filePath */
@@ -132,9 +158,18 @@ export class ReflogWatcher {
   }
 
   async stop() {
-    await this.watcher?.close();
-    await this.configWatcher?.close();
+    if (this.configReloadTimer) {
+      clearTimeout(this.configReloadTimer);
+      this.configReloadTimer = null;
+    }
+    // Detach the handles synchronously. `start()` calls `stop()` without
+    // awaiting and then immediately assigns fresh watchers; if we nulled these
+    // *after* the awaited close() the continuation would clobber the new ones.
+    const watcher = this.watcher;
+    const configWatcher = this.configWatcher;
     this.watcher = null;
     this.configWatcher = null;
+    await watcher?.close();
+    await configWatcher?.close();
   }
 }
