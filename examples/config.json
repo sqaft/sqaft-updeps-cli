@@ -43,6 +43,7 @@
       "path": "~/workspace/hooli/hooli-http-client",
       "name": "@hooli/http-client",
       "packages": [
+        { "path": "~/workspace/hooli/hooli-kit-sdk", "name": "hooli-kit-sdk" },
         { "path": "~/workspace/acme/acme-app", "name": "acme-app" },
         { "path": "~/workspace/acme/acme-functions", "name": "acme-functions" },
         { "path": "~/workspace/acme/acme-runner", "name": "acme-runner" },
@@ -61,6 +62,15 @@
       "name": "@hooli/queue-runner",
       "packages": [
         { "path": "~/workspace/acme/acme-scheduler", "name": "acme-scheduler" }
+      ]
+    },
+    {
+      "path": "~/workspace/hooli/hooli-kit-core",
+      "name": "@hooli/kit-core",
+      "packages": [
+        { "path": "~/workspace/hooli/hooli-kit-emails", "name": "hooli-kit-emails" },
+        { "path": "~/workspace/hooli/hooli-kit-captchas", "name": "hooli-kit-captchas" },
+        { "path": "~/workspace/hooli/hooli-kit-numbers", "name": "hooli-kit-numbers" }
       ]
     },
     {
