@@ -30,8 +30,8 @@
       ]
     },
     {
-      "path": "~/workspace/hooli/hooli-kit-sdk",
-      "name": "@hooli/kit-sdk",
+      "path": "~/workspace/globex/globex-sdk",
+      "name": "@globex/sdk",
       "packages": [
         { "path": "~/workspace/acme/acme-app", "name": "acme-app" },
         { "path": "~/workspace/acme/acme-functions", "name": "acme-functions" },
@@ -43,7 +43,7 @@
       "path": "~/workspace/hooli/hooli-http-client",
       "name": "@hooli/http-client",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-kit-sdk", "name": "hooli-kit-sdk" },
+        { "path": "~/workspace/globex/globex-sdk", "name": "globex-sdk" },
         { "path": "~/workspace/acme/acme-app", "name": "acme-app" },
         { "path": "~/workspace/acme/acme-functions", "name": "acme-functions" },
         { "path": "~/workspace/acme/acme-runner", "name": "acme-runner" },
@@ -65,12 +65,12 @@
       ]
     },
     {
-      "path": "~/workspace/hooli/hooli-kit-core",
-      "name": "@hooli/kit-core",
+      "path": "~/workspace/globex/globex-core",
+      "name": "@globex/core",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-kit-emails", "name": "hooli-kit-emails" },
-        { "path": "~/workspace/hooli/hooli-kit-captchas", "name": "hooli-kit-captchas" },
-        { "path": "~/workspace/hooli/hooli-kit-numbers", "name": "hooli-kit-numbers" }
+        { "path": "~/workspace/globex/globex-emails", "name": "globex-emails" },
+        { "path": "~/workspace/globex/globex-captchas", "name": "globex-captchas" },
+        { "path": "~/workspace/globex/globex-numbers", "name": "globex-numbers" }
       ]
     },
     {

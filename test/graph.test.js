@@ -12,9 +12,9 @@ function load() {
 test('ters indeks hedefi listeleyen tüm kaynakları toplar', async () => {
   const cfg = await load();
   const idx = buildReverseIndex(cfg);
-  const appPath = cfg.repos.find((r) => r.name === '@hooli/kit-sdk').packages[0].path;
+  const appPath = cfg.repos.find((r) => r.name === '@globex/sdk').packages[0].path;
   const names = idx.get(appPath).map((s) => s.name);
-  assert.deepEqual(names, ['@acme/api', '@hooli/kit-sdk', '@hooli/http-client']);
+  assert.deepEqual(names, ['@acme/api', '@globex/sdk', '@hooli/http-client']);
 });
 
 test('umbrella-machine dört paket türetir', async () => {
