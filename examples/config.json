@@ -70,7 +70,29 @@
       "packages": [
         { "path": "~/workspace/globex/globex-emails", "name": "globex-emails" },
         { "path": "~/workspace/globex/globex-captchas", "name": "globex-captchas" },
-        { "path": "~/workspace/globex/globex-numbers", "name": "globex-numbers" }
+        { "path": "~/workspace/globex/globex-numbers", "name": "globex-numbers" },
+        { "path": "~/workspace/globex/globex-api", "name": "globex-api" }
+      ]
+    },
+    {
+      "path": "~/workspace/globex/globex-numbers",
+      "name": "@globex/numbers",
+      "packages": [
+        { "path": "~/workspace/globex/globex-api", "name": "globex-api" }
+      ]
+    },
+    {
+      "path": "~/workspace/globex/globex-emails",
+      "name": "@globex/emails",
+      "packages": [
+        { "path": "~/workspace/globex/globex-api", "name": "globex-api" }
+      ]
+    },
+    {
+      "path": "~/workspace/globex/globex-captchas",
+      "name": "@globex/captchas",
+      "packages": [
+        { "path": "~/workspace/globex/globex-api", "name": "globex-api" }
       ]
     },
     {
