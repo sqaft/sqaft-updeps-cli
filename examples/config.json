@@ -36,7 +36,8 @@
         { "path": "~/workspace/acme/acme-app", "name": "acme-app" },
         { "path": "~/workspace/acme/acme-functions", "name": "acme-functions" },
         { "path": "~/workspace/acme/acme-runner", "name": "acme-runner" },
-        { "path": "~/workspace/acme/acme-scheduler", "name": "acme-scheduler" }
+        { "path": "~/workspace/acme/acme-scheduler", "name": "acme-scheduler" },
+        { "path": "~/workspace/acme/acme-web", "name": "acme-web", "commands": ["composer update"] }
       ]
     },
     {
