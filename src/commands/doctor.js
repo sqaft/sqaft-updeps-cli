@@ -31,6 +31,7 @@ export function cmdDoctor() {
   try {
     config = loadConfig();
     ok(`geçerli (${config.repos.length} kaynak repo)`);
+    for (const w of config.warnings) warn(w);
   } catch (err) {
     bad(err.message);
     process.exit(1);

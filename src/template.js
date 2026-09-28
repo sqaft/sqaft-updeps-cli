@@ -5,6 +5,9 @@ import { shellQuote } from './exec.js';
  * @property {string} pkg          triggering source repo's package name
  * @property {string[]} pkgList    all package identifiers to update for this target
  * @property {string} sha          full sha of the triggering commit
+ * @property {Array<{name:string, sha:string}>} [sources]  every source whose trigger
+ *   coalesced into this run (a target with `coalesce: true` hit by several pushes in
+ *   one debounce window); falls back to a single `{pkg, sha}` entry when absent
  * @property {string} sourcePath
  * @property {string} sourceBranch
  * @property {string} targetPath
@@ -20,11 +23,12 @@ function buildMap(vars) {
   const shortSha = (vars.sha || '').slice(0, 7);
   const pkgs = (vars.pkgList && vars.pkgList.length ? vars.pkgList : [vars.pkg])
     .filter(Boolean);
+  const bumpSources = vars.sources && vars.sources.length ? vars.sources : [{ name: vars.pkg, sha: vars.sha }];
   return {
     pkg: vars.pkg || '',
     pkgs: pkgs.map(shellQuote).join(' '),
     sha: shortSha,
-    bumps: `${vars.pkg || ''}@${shortSha}`,
+    bumps: bumpSources.map((s) => `${s.name || ''}@${(s.sha || '').slice(0, 7)}`).join(', '),
     sourcePath: vars.sourcePath || '',
     sourceBranch: vars.sourceBranch || '',
     targetPath: vars.targetPath || '',

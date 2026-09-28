@@ -1,7 +1,29 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { logger } from './logger.js';
 import { loadState, updateState } from './state.js';
-import { runTarget, recordGroupDone, newGroupId } from './runner.js';
+import { runTarget, recordGroupDone, recordTargetResult, rejectReason, newGroupId } from './runner.js';
 import { appendEvent } from './journal.js';
+
+/**
+ * Fields that determine what running a target actually *does*. Two queued
+ * jobs for the same target path may only be merged into one run when these
+ * match — otherwise a source with e.g. a narrower `branches` list or a
+ * different `commands` array would silently inherit another source's
+ * resolved target instead of its own.
+ * @param {object} target
+ * @returns {string}
+ */
+function execKey(target) {
+  return JSON.stringify({
+    commands: target.commands,
+    commitMessage: target.commitMessage,
+    commandTimeout: target.commandTimeout,
+    dirtyPolicy: target.dirtyPolicy,
+    push: target.push,
+    staleLockSec: target.staleLockSec,
+    waitTimeoutSec: target.waitTimeoutSec
+  });
+}
 
 /**
  * Global serial queue with per-source debouncing and job coalescing.
@@ -9,12 +31,18 @@ import { appendEvent } from './journal.js';
  * - Reflog events for a source repo are debounced (`debounceMs`); the last
  *   event in the window wins.
  * - When the window closes, one job per target of that source is queued, all
- *   tagged with a shared run-group id.
+ *   tagged with a shared run-group id. A target that rejects the trigger
+ *   (wrong trigger type / branch not listed) is resolved as `skipped` right
+ *   here, before ever touching the queue or a lock.
  * - Jobs run strictly one at a time across the whole system.
- * - If a not-yet-started job for the same target is already queued, the new
- *   trigger is merged into it instead of adding a second job (unless
- *   `coalesce` is false). `{pkgs}` already covers every source of a target, so
- *   a second pass would be a no-op.
+ * - If a not-yet-started job for the *same resolved target* (path + execKey)
+ *   is already queued, the new trigger is merged into it instead of adding a
+ *   second job — but only when the target's own `coalesce` setting (config:
+ *   `defaults.coalesce` / `repos[].packages[].coalesce`, default `true`)
+ *   allows it. `{pkgs}`/`{bumps}` already cover every source of a target, so
+ *   a second pass with the same execution config would be a no-op; a
+ *   different execKey never merges regardless of `coalesce`, since running it
+ *   would silently apply the wrong source's config.
  * - When every job of a group has finished, `onGroupDone` fires once.
  */
 export class UpdateQueue {
@@ -22,13 +50,11 @@ export class UpdateQueue {
    * @param {ReturnType<import('./config.js').resolveConfig>} config
    * @param {object} [opts]
    * @param {(group: { title: string, tally: object }) => void} [opts.onGroupDone]
-   * @param {boolean} [opts.coalesce=true]
    * @param {typeof runTarget} [opts.runner]  injectable for testing
    */
-  constructor(config, { onGroupDone, coalesce = true, runner = runTarget } = {}) {
+  constructor(config, { onGroupDone, runner = runTarget } = {}) {
     this.config = config;
     this.onGroupDone = onGroupDone || (() => {});
-    this.coalesce = coalesce;
     this.runner = runner;
 
     /** @type {Map<string, NodeJS.Timeout>} sourcePath -> debounce timer */
@@ -42,6 +68,13 @@ export class UpdateQueue {
     /** @type {Set<string>} target paths with an in-flight job */
     this.runningTargets = new Set();
     this.processing = false;
+
+    /** True once `shutdown()` has been called: no new jobs are started. */
+    this.shuttingDown = false;
+    /** @type {AbortController|null} controller for the currently running job, if any */
+    this.activeAbortController = null;
+    /** @type {Promise<void>|null} the currently running job's promise, if any */
+    this.activeProcessPromise = null;
   }
 
   /** @param {ReturnType<import('./config.js').resolveConfig>} config */
@@ -54,6 +87,7 @@ export class UpdateQueue {
    * @param {{ trigger:string, branch:string, sha:string }} event
    */
   enqueue(sourceRepo, event) {
+    if (this.shuttingDown) return;
     const sourcePath = sourceRepo.path;
 
     const state = loadState();
@@ -110,6 +144,20 @@ export class UpdateQueue {
     });
 
     for (const target of sourceRepo.packages) {
+      const triggerCtx = { trigger: event.trigger, branch: event.branch };
+      const reason = rejectReason(target, triggerCtx);
+      if (reason) {
+        group.tally.skipped++;
+        recordTargetResult({
+          target,
+          trigger: { ...triggerCtx, sha: event.sha, sourceName: sourceRepo.name, sourcePath: sourceRepo.path },
+          group: groupId,
+          status: 'skipped',
+          rawMessage: reason
+        });
+        continue;
+      }
+
       const source = {
         name: sourceRepo.name,
         path: sourceRepo.path,
@@ -118,8 +166,8 @@ export class UpdateQueue {
         trigger: event.trigger
       };
 
-      const existing = this.coalesce
-        ? this.ready.find((j) => j.targetPath === target.path)
+      const existing = target.coalesce
+        ? this.ready.find((j) => j.targetPath === target.path && execKey(j.target) === execKey(target))
         : undefined;
 
       if (existing) {
@@ -144,7 +192,7 @@ export class UpdateQueue {
 
   _drain() {
     this._writeQueueDepth();
-    if (this.processing) return;
+    if (this.processing || this.shuttingDown) return;
     const job = this.ready.find((j) => !this.runningTargets.has(j.targetPath));
     if (!job) return;
 
@@ -152,12 +200,68 @@ export class UpdateQueue {
     this.processing = true;
     this.runningTargets.add(job.targetPath);
     this._writeQueueDepth();
-    this._process(job).finally(() => {
+    const controller = new AbortController();
+    this.activeAbortController = controller;
+    this.activeProcessPromise = this._process(job, controller.signal).finally(() => {
       this.processing = false;
       this.runningTargets.delete(job.targetPath);
+      this.activeAbortController = null;
+      this.activeProcessPromise = null;
       this._writeQueueDepth();
       this._drain();
     });
+  }
+
+  /**
+   * Stops accepting new work and waits for the currently running job to
+   * finish — aborting it first so it doesn't run forever. Debounced events
+   * that hadn't produced a job yet are dropped (their source's reflog tip is
+   * unchanged, so the daemon picks them up again on next start — see
+   * `ReflogWatcher`'s missed-push catch-up). Jobs that had already been
+   * queued but never got a turn are settled as `skipped` (rather than left
+   * to dangle with their group never completing) for the same reason.
+   * @param {number} [timeoutMs=15000]
+   */
+  async shutdown(timeoutMs = 15000) {
+    this.shuttingDown = true;
+    for (const timer of this.timers.values()) clearTimeout(timer);
+    this.timers.clear();
+    this.pendingEvents.clear();
+
+    if (this.activeProcessPromise) {
+      this.activeAbortController?.abort();
+      await Promise.race([
+        this.activeProcessPromise,
+        sleep(timeoutMs).then(() =>
+          logger.warn('Kapatma zaman aşımına uğradı, aktif iş beklenmeden çıkılıyor.')
+        )
+      ]);
+    }
+
+    const stillQueued = this.ready.splice(0, this.ready.length);
+    for (const job of stillQueued) {
+      const groupId = [...job.groupIds][0];
+      const result = recordTargetResult({
+        target: job.target,
+        trigger: { trigger: 'shutdown', sourceName: [...job.sources.values()][0]?.name || '' },
+        group: groupId,
+        status: 'skipped',
+        rawMessage: 'daemon kapatıldı, çalıştırılmadı'
+      });
+      this._applyResult(job, result);
+    }
+    this._writeQueueDepth();
+  }
+
+  /** @param {object} job @param {{status:string}} result */
+  _applyResult(job, result) {
+    for (const groupId of job.groupIds) {
+      const group = this.groups.get(groupId);
+      if (!group) continue;
+      group.tally[result.status]++;
+      group.remaining--;
+      if (group.remaining <= 0) this._settleGroup(groupId);
+    }
   }
 
   _writeQueueDepth() {
@@ -176,8 +280,29 @@ export class UpdateQueue {
     }
   }
 
-  /** @param {object} job */
-  async _process(job) {
+  /**
+   * Re-resolves a queued job's target from the *current* config, trying each
+   * of the job's sources in turn. Config can live-reload while a job sits in
+   * `ready` (edited while queued, or a target removed); running the stale
+   * snapshot captured at enqueue time would apply outdated commands, or run a
+   * target that no longer exists in the config at all.
+   * @param {object} job
+   * @returns {object|null}
+   */
+  _resolveCurrentTarget(job) {
+    for (const source of job.sources.values()) {
+      const repo = this.config.repos.find((r) => r.path === source.path);
+      const target = repo?.packages.find((p) => p.path === job.targetPath);
+      if (target) return target;
+    }
+    return null;
+  }
+
+  /**
+   * @param {object} job
+   * @param {AbortSignal} [signal]  aborts an in-flight command on shutdown
+   */
+  async _process(job, signal) {
     const sources = [...job.sources.values()];
     const primary = sources[sources.length - 1];
     const trigger = {
@@ -185,30 +310,43 @@ export class UpdateQueue {
       branch: primary.branch,
       sha: primary.sha,
       sourceName: primary.name,
-      sourcePath: primary.path
+      sourcePath: primary.path,
+      sources: sources.map((s) => ({ name: s.name, sha: s.sha }))
     };
-    const primaryGroup = [...job.groupIds][job.groupIds.size - 1];
+    const groupIds = [...job.groupIds];
+    const primaryGroup = groupIds[groupIds.length - 1];
+    const extraGroups = groupIds.filter((g) => g !== primaryGroup);
+
+    const currentTarget = this._resolveCurrentTarget(job);
 
     let result;
-    try {
-      result = await this.runner({
-        config: this.config,
+    if (!currentTarget) {
+      logger.warn(`[${job.target.name}] hedef config'ten kaldırılmış, atlanıyor`);
+      result = recordTargetResult({
         target: job.target,
         trigger,
-        group: primaryGroup
+        group: primaryGroup,
+        status: 'skipped',
+        rawMessage: "hedef config'ten kaldırıldı, çalıştırılmadı",
+        extra: extraGroups.length ? { groups: [primaryGroup, ...extraGroups] } : {}
       });
-    } catch (err) {
-      logger.error(`[${job.target.name}] kuyruk hatası: ${err.message}`);
-      result = { status: 'failed', target: job.target.name, message: err.message };
+    } else {
+      try {
+        result = await this.runner({
+          config: this.config,
+          target: currentTarget,
+          trigger,
+          group: primaryGroup,
+          extraGroups,
+          signal
+        });
+      } catch (err) {
+        logger.error(`[${job.target.name}] kuyruk hatası: ${err.message}`);
+        result = { status: 'failed', target: job.target.name, message: err.message };
+      }
     }
 
-    for (const groupId of job.groupIds) {
-      const group = this.groups.get(groupId);
-      if (!group) continue;
-      group.tally[result.status]++;
-      group.remaining--;
-      if (group.remaining <= 0) this._settleGroup(groupId);
-    }
+    this._applyResult(job, result);
   }
 
   /** @param {string} groupId */

@@ -74,20 +74,7 @@ export class ReflogWatcher {
     logger.info(`Reflog izleyici: ${files.length} dosya`);
     files.forEach((f) => logger.debug(`  izleniyor: ${f}`));
 
-    // Record current head shas as the baseline so history is not replayed.
-    updateState((state) => {
-      for (const [file, repo] of byFile) {
-        const parsed = parseReflogLine(readLastLine(file) || '');
-        if (parsed) {
-          state.repos[repo.path] = {
-            ...(state.repos[repo.path] || {}),
-            lastProcessedSha: parsed.newSha,
-            lastProcessedAt: Date.now()
-          };
-        }
-      }
-      return state;
-    });
+    this._catchUpMissedEvents(files);
 
     this.watcher = chokidar.watch(files, {
       ignoreInitial: true,
@@ -98,6 +85,42 @@ export class ReflogWatcher {
     this.watcher.on('change', handler);
 
     this._watchConfig();
+  }
+
+  /**
+   * Catches up on reflog changes that happened while nothing was watching
+   * (daemon down for a restart/crash, or the gap before `updeps start`).
+   * Without this, `start()` used to just record the current tip as a fresh
+   * baseline — a push made during that gap left no trace, since chokidar
+   * only reports changes from here on (`ignoreInitial: true`).
+   *
+   * Compares each watched file's current tip against the tip recorded the
+   * last time *this exact file* was watched (`state.reflogTips`, keyed by
+   * path so different branches of the same repo never share a baseline). A
+   * mismatch is fed through the normal event pipeline exactly like a live
+   * chokidar 'change'. A file seen for the first time ever (fresh install,
+   * or after `updeps reset`) just records its baseline — there's nothing to
+   * "catch up" on since no prior state exists to compare against.
+   * @param {string[]} files
+   */
+  _catchUpMissedEvents(files) {
+    const missed = [];
+    updateState((state) => {
+      state.reflogTips = state.reflogTips || {};
+      for (const file of files) {
+        const parsed = parseReflogLine(readLastLine(file) || '');
+        if (!parsed) continue;
+        const storedTip = state.reflogTips[file];
+        state.reflogTips[file] = parsed.newSha;
+        if (storedTip !== undefined && storedTip !== parsed.newSha) missed.push(file);
+      }
+      return state;
+    });
+
+    for (const file of missed) {
+      logger.info(`[${this.byFile.get(file)?.name}] kaçırılan olay yakalandı, işleniyor: ${file}`);
+      this._onReflogChange(file);
+    }
   }
 
   /**
@@ -138,6 +161,14 @@ export class ReflogWatcher {
 
     const parsed = parseReflogLine(readLastLine(filePath) || '');
     if (!parsed) return;
+
+    // Keep the catch-up baseline current so a restart never re-processes a
+    // push that was already handled live.
+    updateState((state) => {
+      state.reflogTips = state.reflogTips || {};
+      state.reflogTips[filePath] = parsed.newSha;
+      return state;
+    });
 
     const event = classifyReflogEvent(filePath, parsed);
     if (!event) return;

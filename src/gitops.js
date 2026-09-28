@@ -86,6 +86,35 @@ export function selectiveCommit(cwd, paths, message) {
 }
 
 /**
+ * Content hash (git blob sha) of a working-tree file, or null if it can't be
+ * read (e.g. deleted by the command).
+ * @param {string} cwd
+ * @param {string} filePath  relative to cwd
+ * @returns {string|null}
+ */
+function hashFile(cwd, filePath) {
+  const res = spawnSync('git', ['hash-object', '--', filePath], { cwd, encoding: 'utf8' });
+  if (res.status !== 0) return null;
+  return (res.stdout || '').trim() || null;
+}
+
+/**
+ * Hashes the working-tree content of each given path. Used to detect a
+ * command re-touching a file that was *already* dirty before the run: its
+ * `git status` code doesn't change (still e.g. ` M`), so `diffSnapshots`
+ * alone can't see it — without this, that update would be silently dropped
+ * and reported as "no change" even though the command did change something.
+ * @param {string} cwd
+ * @param {string[]} paths  relative to cwd
+ * @returns {Map<string,string|null>}
+ */
+export function hashPaths(cwd, paths) {
+  const map = new Map();
+  for (const p of paths) map.set(p, hashFile(cwd, p));
+  return map;
+}
+
+/**
  * Reverts only the changes the commands made to files that were clean
  * beforehand. Files dirty before the run are never touched. Newly created
  * untracked files are left in place and reported.

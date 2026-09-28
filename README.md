@@ -17,7 +17,10 @@ bilir, repolar araçtan habersizdir.
    FSEvents).
 2. Bir kaynak repoya push ettiğinde git bu dosyayı `update by push` mesajıyla
    günceller → daemon olayı yakalar. (Push başarısızsa dosya güncellenmez, hiçbir
-   şey olmaz — ekstra doğrulamaya gerek yok.)
+   şey olmaz — ekstra doğrulamaya gerek yok.) Daemon kapalıyken (restart,
+   çökme, `updeps stop`) yapılan push'lar kaybolmaz: her reflog dosyasının son
+   görülen ucu `state.json`'da tutulur, `updeps start`'ta mevcut uçla
+   karşılaştırılır ve fark varsa normal akışa aynen bir canlı olay gibi sokulur.
 3. Kısa bir `debounceMs` penceresi sonrası, o kaynağa bağlı **her hedef repo**
    için sırayla (tüm sistemde aynı anda tek iş):
    - hedef repo kilitlenir (`mkdir` tabanlı, macOS'ta `flock` yok),
@@ -65,6 +68,10 @@ hatası olursa eski ayarlar korunur ve log'a yazılır.) `updeps init`,
 `updeps add`, `updeps remove` ile yapılan değişiklikler de aynı şekilde canlı
 uygulanır.
 
+Bilinmeyen bir alan adı (`comands` gibi bir yazım hatası) config'i geçersiz
+kılmaz — sessizce yok sayılıp varsayılana düşmek yerine `updeps doctor`
+çıktısında ve daemon log'unda uyarı olarak görünür.
+
 ```jsonc
 {
   "notifications": true,
@@ -78,7 +85,8 @@ uygulanır.
     "staleLockSec": 900,                  // bu kadar eski kilit "bayat" sayılır
     "waitTimeoutSec": 0,                  // 0 = kilit için sınırsız bekle
     "dirtyPolicy": "selective",           // selective | skip
-    "push": false
+    "push": false,
+    "coalesce": true                      // bkz. "Eşzamanlılık"
   },
   "repos": [
     {
@@ -133,7 +141,7 @@ SHA tutarsızlığı oluşmaz — lockfile parse etmeye gerek kalmadan.
 | `{pkg}` | Tetikleyen kaynağın adı |
 | `{pkgs}` | Türetilen paket listesi (komutta shell-quote'lu, commit mesajında virgüllü) |
 | `{sha}` | Tetikleyen commit'in 7 haneli SHA'sı |
-| `{bumps}` | `{pkg}@{sha}` (örn. `@umbrella/api@3b4f1a2`) |
+| `{bumps}` | `{pkg}@{sha}`; aynı hedefe birleşen (coalesce) birden çok kaynak varsa `a@sha1, b@sha2` |
 | `{sourcePath}` · `{sourceBranch}` | Kaynak repo yolu / branch'i |
 | `{targetPath}` · `{targetBranch}` | Hedef repo yolu / aktif branch'i |
 
@@ -184,8 +192,15 @@ döngülerini (cycle) uyarır.
 
 Tüm sistemde **aynı anda tek iş** çalışır (global seri kuyruk). Bir kaynağa
 ardışık push'lar `debounceMs` içinde birleşir. Kuyrukta henüz başlamamış, aynı
-hedefe ait bir iş varsa yeni tetikleme ona eklenir (ayrı iş açılmaz) — `{pkgs}`
-zaten tüm kaynakları kapsadığı için ikinci çalıştırma no-op olurdu. Çalışmakta
+hedefe ait bir iş varsa ve o hedefin `coalesce` ayarı açıksa (varsayılan
+`true`) yeni tetikleme ona eklenir (ayrı iş açılmaz) — `{pkgs}` zaten tüm
+kaynakları kapsadığı için ikinci çalıştırma çoğu zaman no-op olurdu; birleşen
+işte `{bumps}` her kaynağı ayrı ayrı listeler (`a@sha1, b@sha2`). `coalesce:
+false` yapılırsa aynı debounce penceresinde biriken her kaynak için hedef ayrı
+ayrı çalıştırılır. İki kaynağın aynı hedef için **farklı** komut/branch/vb.
+tanımladığı durumlarda (örn. biri `branches: ["main"]`, diğeri farklı bir
+`commands` listesi) birleştirme hiçbir zaman olmaz — her biri kendi ayarıyla
+ayrı iş olarak çalışır, böylece bir kaynağın ayarı diğerine sızmaz. Çalışmakta
 olan bir hedefe yeni olay gelirse iş bittikten sonra tekrar sıraya alınır.
 
 ---

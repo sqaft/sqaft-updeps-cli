@@ -8,7 +8,8 @@ const EMPTY_STATE = {
   openFailures: [],   // [{ id, source, target, targetPath, message, errorTail, firstSeen, lastSeen, count }]
   activeRun: null,    // { group, source, target, targetPath, startedAt } — what is running right now
   queue: { pending: 0, jobs: [] }, // { pending, jobs:[{ target, targetPath, sources:[name] }] } — waiting behind activeRun
-  daemon: null        // { pid, startedAt, watchedRepos }
+  daemon: null,       // { pid, startedAt, watchedRepos }
+  reflogTips: {}      // reflogFilePath -> last-seen sha; lets the watcher catch up on pushes made while the daemon was down
 };
 
 /**

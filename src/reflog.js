@@ -65,11 +65,14 @@ export function classifyReflogEvent(reflogPath, parsed) {
   if (remote) {
     const [, remoteName, branch] = remote;
     if (msg.includes('update by push')) return { trigger: 'push', branch, remote: remoteName, sha };
-    if (msg.startsWith('fetch') || msg.includes(': fetch')) {
+    // `git pull` writes "pull <remote> <branch>: fast-forward" / "storing head"
+    // to this same remote-tracking reflog — it's someone else's push landing
+    // locally via fetch, not a push of ours, so it must never be classified as one.
+    if (msg.startsWith('fetch') || msg.includes(': fetch') || msg.startsWith('pull')) {
       return { trigger: 'fetch', branch, remote: remoteName, sha };
     }
-    // ambiguous remote-tracking update — treat as push (safe default)
-    return { trigger: 'push', branch, remote: remoteName, sha };
+    // unrecognized remote-tracking update — don't guess, ignore it
+    return null;
   }
 
   const head = norm.match(/\/logs\/refs\/heads\/(.+)$/);

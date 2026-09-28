@@ -15,7 +15,8 @@ export const DEFAULT_VALUES = {
   staleLockSec: 900,
   waitTimeoutSec: 0,
   dirtyPolicy: 'selective',
-  push: false
+  push: false,
+  coalesce: true
 };
 
 class ConfigError extends Error {}
@@ -85,6 +86,7 @@ export function validateConfig(raw) {
     assertPositiveNumber(d.waitTimeoutSec, 'defaults.waitTimeoutSec', { allowZero: true });
     assertEnum(d.dirtyPolicy, 'defaults.dirtyPolicy', VALID_DIRTY_POLICIES);
     assertBoolean(d.push, 'defaults.push');
+    assertBoolean(d.coalesce, 'defaults.coalesce');
   }
 
   if (raw.repos !== undefined) {
@@ -120,20 +122,85 @@ export function validateConfig(raw) {
           assertPositiveNumber(pkg.waitTimeoutSec, `${pp}.waitTimeoutSec`, { allowZero: true });
           assertEnum(pkg.dirtyPolicy, `${pp}.dirtyPolicy`, VALID_DIRTY_POLICIES);
           assertBoolean(pkg.push, `${pp}.push`);
+          assertBoolean(pkg.coalesce, `${pp}.coalesce`);
         });
       }
     });
   }
 }
 
+const KNOWN_ROOT_KEYS = new Set(['notifications', 'defaults', 'repos']);
+const KNOWN_DEFAULTS_KEYS = new Set([
+  'triggers',
+  'branches',
+  'commands',
+  'commitMessage',
+  'commandTimeout',
+  'debounceMs',
+  'staleLockSec',
+  'waitTimeoutSec',
+  'dirtyPolicy',
+  'push',
+  'coalesce'
+]);
+const KNOWN_REPO_KEYS = new Set(['path', 'name', 'branches', 'triggers', 'packages']);
+const KNOWN_PACKAGE_KEYS = new Set([
+  'path',
+  'name',
+  'triggers',
+  'branches',
+  'commands',
+  'commitMessage',
+  'commandTimeout',
+  'staleLockSec',
+  'waitTimeoutSec',
+  'dirtyPolicy',
+  'push',
+  'coalesce'
+]);
+
+function unknownKeysOf(obj, known) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return [];
+  return Object.keys(obj).filter((k) => !known.has(k) && !k.startsWith('_'));
+}
+
+/**
+ * Collects "unknown field" warnings — a typo like `comands` (missing an `m`)
+ * would otherwise silently fall back to the default with no signal that
+ * anything was misspelled. Never throws; structural problems are
+ * `validateConfig`'s job, not this one's.
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+export function collectWarnings(raw) {
+  const warnings = [];
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return warnings;
+
+  for (const k of unknownKeysOf(raw, KNOWN_ROOT_KEYS)) warnings.push(`bilinmeyen alan: ${k}`);
+  for (const k of unknownKeysOf(raw.defaults, KNOWN_DEFAULTS_KEYS)) warnings.push(`bilinmeyen alan: defaults.${k}`);
+
+  (Array.isArray(raw.repos) ? raw.repos : []).forEach((repo, ri) => {
+    for (const k of unknownKeysOf(repo, KNOWN_REPO_KEYS)) warnings.push(`bilinmeyen alan: repos[${ri}].${k}`);
+    const packages = repo && Array.isArray(repo.packages) ? repo.packages : [];
+    packages.forEach((pkg, pi) => {
+      for (const k of unknownKeysOf(pkg, KNOWN_PACKAGE_KEYS)) {
+        warnings.push(`bilinmeyen alan: repos[${ri}].packages[${pi}].${k}`);
+      }
+    });
+  });
+
+  return warnings;
+}
+
 /**
  * Resolves a raw config into the internal shape: paths expanded, defaults
  * inherited down to each target package.
  * @param {object} raw
- * @returns {{ notifications: boolean, defaults: object, repos: any[] }}
+ * @returns {{ notifications: boolean, defaults: object, repos: any[], warnings: string[] }}
  */
 export function resolveConfig(raw) {
   validateConfig(raw);
+  const warnings = collectWarnings(raw);
 
   const defaults = { ...DEFAULT_VALUES, ...(raw.defaults || {}) };
 
@@ -158,7 +225,8 @@ export function resolveConfig(raw) {
         staleLockSec: pkg.staleLockSec ?? defaults.staleLockSec,
         waitTimeoutSec: pkg.waitTimeoutSec ?? defaults.waitTimeoutSec,
         dirtyPolicy: pkg.dirtyPolicy ?? defaults.dirtyPolicy,
-        push: pkg.push !== undefined ? Boolean(pkg.push) : Boolean(defaults.push)
+        push: pkg.push !== undefined ? Boolean(pkg.push) : Boolean(defaults.push),
+        coalesce: pkg.coalesce !== undefined ? Boolean(pkg.coalesce) : Boolean(defaults.coalesce)
       };
     });
 
@@ -171,7 +239,7 @@ export function resolveConfig(raw) {
     };
   });
 
-  return { notifications, defaults, repos };
+  return { notifications, defaults, repos, warnings };
 }
 
 /**

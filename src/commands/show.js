@@ -16,8 +16,13 @@ export function cmdShow(positionals) {
   // Collect all events, then pick a group.
   const all = readEvents({ limit: 5000 });
 
+  // A coalesced target run belongs to every group whose trigger merged into
+  // it, not just the one that happened to start it first (see runner.js
+  // `recordTargetResult`'s `groups` field).
+  const inGroup = (r, id) => r.group === id || (Array.isArray(r.groups) && r.groups.includes(id));
+
   let groupId = selector;
-  const isGroupId = all.some((r) => r.group === selector);
+  const isGroupId = all.some((r) => inGroup(r, selector));
   if (!isGroupId) {
     // find most recent target/source match, take its group
     const match = all.find(
@@ -30,7 +35,7 @@ export function cmdShow(positionals) {
     groupId = match.group;
   }
 
-  const events = all.filter((r) => r.group === groupId).reverse(); // chronological
+  const events = all.filter((r) => inGroup(r, groupId)).reverse(); // chronological
   const start = events.find((r) => r.kind === 'group_start');
   const targets = events.filter((r) => r.kind === 'target');
   const doneEvt = events.find((r) => r.kind === 'group_done');

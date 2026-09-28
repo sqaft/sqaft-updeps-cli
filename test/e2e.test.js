@@ -13,6 +13,7 @@ process.env.XDG_CONFIG_HOME = path.join(dir, 'config');
 const { resolveConfig } = await import('../src/config.js');
 const { UpdateQueue } = await import('../src/queue.js');
 const { ReflogWatcher } = await import('../src/watcher.js');
+const { runTarget } = await import('../src/runner.js');
 
 test.after(cleanup);
 
@@ -102,4 +103,58 @@ test('push → dependent hedefte yalnızca lock dosyası commit\'lenir', async (
 
   // lock file content reflects the update command ({pkgs} = source name)
   assert.match(fs.readFileSync(path.join(target, 'deps.lock'), 'utf8'), /source=new my-source/);
+});
+
+test('önceden kirli hedef dosyasındaki güncelleme sessizce kaybolmaz', async () => {
+  const source = path.join(dir, 'dirty-source');
+  const target = path.join(dir, 'dirty-target');
+
+  fs.mkdirSync(source);
+  g(['init', '-q', '-b', 'main'], source);
+  g(['config', 'user.email', 't@t.t'], source);
+  g(['config', 'user.name', 't'], source);
+  fs.writeFileSync(path.join(source, 'f.js'), 'v1\n');
+  g(['add', '-A'], source);
+  g(['commit', '-qm', 'init'], source);
+
+  fs.mkdirSync(target);
+  g(['init', '-q', '-b', 'main'], target);
+  g(['config', 'user.email', 't@t.t'], target);
+  g(['config', 'user.name', 't'], target);
+  fs.writeFileSync(path.join(target, 'deps.lock'), 'v1\n');
+  fs.writeFileSync(
+    path.join(target, 'bump.sh'),
+    '#!/usr/bin/env bash\necho "v3" > deps.lock\n',
+    { mode: 0o755 }
+  );
+  g(['add', '-A'], target);
+  g(['commit', '-qm', 'init'], target);
+
+  // kullanıcı deps.lock üzerinde zaten çalışıyor (kirli) — komut da onu değiştirecek
+  fs.writeFileSync(path.join(target, 'deps.lock'), 'v2-WIP\n');
+
+  const config = resolveConfig({
+    notifications: false,
+    defaults: { commandTimeout: 30 },
+    repos: [
+      {
+        path: source,
+        name: 'src',
+        packages: [{ path: target, name: 'tgt', commands: ['bash bump.sh'] }]
+      }
+    ]
+  });
+
+  const result = await runTarget({
+    config,
+    target: config.repos[0].packages[0],
+    trigger: { trigger: 'manual', sourceName: 'src', sourcePath: source }
+  });
+
+  // ne "unchanged" (güncelleme sessizce kaybolmuş gibi görünmemeli) ne "failed"
+  assert.equal(result.status, 'skipped');
+  assert.match(result.message, /önceden kirli/);
+  // kullanıcının + komutun üst üste bindiği hâl korunur, geri alınmaz/commit'lenmez
+  assert.equal(fs.readFileSync(path.join(target, 'deps.lock'), 'utf8'), 'v3\n');
+  assert.equal(g(['status', '--porcelain'], target).trim() !== '', true); // hâlâ kirli, commit atılmadı
 });

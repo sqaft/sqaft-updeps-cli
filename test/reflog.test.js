@@ -42,6 +42,22 @@ test('merge/pull sınıflandırması', () => {
   assert.equal(e.trigger, 'merge');
 });
 
+test('git pull, remote-tracking reflogda fetch sayılır (push değil)', () => {
+  const p1 = parseReflogLine(`${SHA_A} ${SHA_B} X <x@x> 1700000000 +0000\tpull -q origin main: storing head`);
+  const e1 = classifyReflogEvent('/repo/.git/logs/refs/remotes/origin/main', p1);
+  assert.equal(e1.trigger, 'fetch');
+
+  const p2 = parseReflogLine(`${SHA_A} ${SHA_B} X <x@x> 1700000000 +0000\tpull -q: fast-forward`);
+  const e2 = classifyReflogEvent('/repo/.git/logs/refs/remotes/origin/main', p2);
+  assert.equal(e2.trigger, 'fetch');
+});
+
+test('tanınmayan remote-tracking mesajı push varsayılmaz, yok sayılır', () => {
+  const p = parseReflogLine(`${SHA_A} ${SHA_B} X <x@x> 1700000000 +0000\tsome unrelated ref-update`);
+  const e = classifyReflogEvent('/repo/.git/logs/refs/remotes/origin/main', p);
+  assert.equal(e, null);
+});
+
 test('slash içeren branch adı', () => {
   const p = parseReflogLine(`${SHA_A} ${SHA_B} X <x@x> 1700000000 +0000\tupdate by push`);
   const e = classifyReflogEvent('/repo/.git/logs/refs/remotes/origin/feature/x', p);

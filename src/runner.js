@@ -10,7 +10,8 @@ import {
   diffSnapshots,
   selectiveCommit,
   safeRollback,
-  activeBranch
+  activeBranch,
+  hashPaths
 } from './gitops.js';
 import { updateState } from './state.js';
 import { appendEvent } from './journal.js';
@@ -49,94 +50,159 @@ function errId(source, target) {
 }
 
 /**
+ * Why a target rejects a trigger, or null if it accepts it. `manual` always
+ * accepts. Shared by `runTarget` (its own safety net) and the queue (which
+ * pre-filters before a target ever gets coalesced or queued).
+ * @param {object} target
+ * @param {{ trigger:string, branch?:string }} trigger
+ * @returns {string|null}
+ */
+export function rejectReason(target, trigger) {
+  if (trigger.trigger === 'manual') return null;
+  if (!target.triggers.includes(trigger.trigger)) {
+    return `tetikleyici '${trigger.trigger}' bu hedef için kapalı`;
+  }
+  if (target.branches.length > 0 && trigger.branch && !target.branches.includes(trigger.branch)) {
+    return `branch '${trigger.branch}' bu hedef için listede değil`;
+  }
+  return null;
+}
+
+/**
+ * @param {object} target
+ * @param {{ trigger:string, branch?:string }} trigger
+ * @returns {boolean}
+ */
+export function targetAccepts(target, trigger) {
+  return rejectReason(target, trigger) === null;
+}
+
+/**
+ * Journals a target outcome, updates openFailures, and returns a TargetResult.
+ * Standalone so the queue can record a pre-filtered rejection without going
+ * through the lock/command pipeline in `runTarget`.
+ * @param {object} params
+ * @param {object} params.target
+ * @param {TriggerContext} params.trigger
+ * @param {string} params.group
+ * @param {TargetResult['status']} params.status
+ * @param {string} params.rawMessage
+ * @param {object} [params.extra]
+ * @param {number} [params.startedAt]
+ * @returns {TargetResult}
+ */
+export function recordTargetResult({ target, trigger, group, status, rawMessage, extra = {}, startedAt = Date.now() }) {
+  const label = target.name;
+  const source = trigger.sourceName;
+  const id = errId(source, label);
+  const message = redact(rawMessage);
+  if (extra.errorTail) extra.errorTail = redact(extra.errorTail);
+  if (extra.commands) extra.commands = extra.commands.map(redact);
+
+  appendEvent({
+    kind: 'target',
+    group,
+    source,
+    sourceSha: (trigger.sha || '').slice(0, 12),
+    trigger: trigger.trigger,
+    target: label,
+    targetPath: target.path,
+    status,
+    durationMs: Date.now() - startedAt,
+    message,
+    ...extra
+  });
+
+  updateState((state) => {
+    if (status === 'failed') {
+      const existing = state.openFailures.find((f) => f.id === id);
+      if (existing) {
+        existing.message = message;
+        existing.errorTail = extra.errorTail || '';
+        existing.lastSeen = Date.now();
+        existing.count += 1;
+        existing.group = group;
+      } else {
+        state.openFailures.unshift({
+          id,
+          source,
+          target: label,
+          targetPath: target.path,
+          message,
+          errorTail: extra.errorTail || '',
+          firstSeen: Date.now(),
+          lastSeen: Date.now(),
+          count: 1,
+          group
+        });
+      }
+    } else if (status === 'committed' || status === 'unchanged') {
+      // a clean run resolves any standing failure for this pair
+      state.openFailures = state.openFailures.filter((f) => f.id !== id);
+    }
+    return state;
+  });
+
+  if (status === 'failed') logger.error(`[${label}] ${message}`);
+  return { status, target: label, message };
+}
+
+/**
  * Runs the update pipeline for a single target repo.
  * @param {object} params
  * @param {ReturnType<import('./config.js').resolveConfig>} params.config
  * @param {object} params.target      resolved package object
  * @param {TriggerContext} params.trigger
  * @param {string} [params.group]     run-group id for journal correlation
+ * @param {string[]} [params.extraGroups]  other run-groups a coalesced job also belongs to
  * @param {boolean} [params.dryRun=false]
  * @param {boolean} [params.echo=false]
+ * @param {AbortSignal} [params.signal]  aborts an in-flight command/lock-wait (daemon shutdown)
  * @returns {Promise<TargetResult>}
  */
-export async function runTarget({ config, target, trigger, group, dryRun = false, echo = false }) {
+export async function runTarget({
+  config,
+  target,
+  trigger,
+  group,
+  extraGroups = [],
+  dryRun = false,
+  echo = false,
+  signal
+}) {
   const label = target.name;
-  const source = trigger.sourceName;
   const groupId = group || newGroupId();
   const startedAt = Date.now();
-  const id = errId(source, label);
 
   /** Journals the outcome, updates openFailures, and returns the result. */
-  const emit = (status, rawMessage, extra = {}) => {
-    const message = redact(rawMessage);
-    if (extra.errorTail) extra.errorTail = redact(extra.errorTail);
-    if (extra.commands) extra.commands = extra.commands.map(redact);
-    appendEvent({
-      kind: 'target',
+  const emit = (status, rawMessage, extra = {}) =>
+    recordTargetResult({
+      target,
+      trigger,
       group: groupId,
-      source,
-      sourceSha: (trigger.sha || '').slice(0, 12),
-      trigger: trigger.trigger,
-      target: label,
-      targetPath: target.path,
       status,
-      durationMs: Date.now() - startedAt,
-      message,
-      ...extra
+      rawMessage,
+      startedAt,
+      extra: extraGroups.length ? { ...extra, groups: [groupId, ...extraGroups] } : extra
     });
 
-    updateState((state) => {
-      if (status === 'failed') {
-        const existing = state.openFailures.find((f) => f.id === id);
-        if (existing) {
-          existing.message = message;
-          existing.errorTail = extra.errorTail || '';
-          existing.lastSeen = Date.now();
-          existing.count += 1;
-          existing.group = groupId;
-        } else {
-          state.openFailures.unshift({
-            id,
-            source,
-            target: label,
-            targetPath: target.path,
-            message,
-            errorTail: extra.errorTail || '',
-            firstSeen: Date.now(),
-            lastSeen: Date.now(),
-            count: 1,
-            group: groupId
-          });
-        }
-      } else if (status === 'committed' || status === 'unchanged') {
-        // a clean run resolves any standing failure for this pair
-        state.openFailures = state.openFailures.filter((f) => f.id !== id);
-      }
-      return state;
-    });
+  const reason = rejectReason(target, trigger);
+  if (reason) return emit('skipped', reason);
 
-    if (status === 'failed') logger.error(`[${label}] ${message}`);
-    return { status, target: label, message };
-  };
-
-  if (trigger.trigger !== 'manual') {
-    if (!target.triggers.includes(trigger.trigger)) {
-      return emit('skipped', `tetikleyici '${trigger.trigger}' bu hedef için kapalı`);
-    }
-    if (target.branches.length > 0 && trigger.branch && !target.branches.includes(trigger.branch)) {
-      return emit('skipped', `branch '${trigger.branch}' bu hedef için listede değil`);
-    }
-  }
+  if (signal?.aborted) return emit('failed', 'daemon kapatıldı, başlamadan iptal edildi');
 
   let lock;
   try {
     lock = await acquireLock(target.path, {
       staleLockSec: target.staleLockSec,
-      waitTimeoutSec: target.waitTimeoutSec
+      waitTimeoutSec: target.waitTimeoutSec,
+      signal
     });
   } catch (err) {
     return emit('failed', err.message);
   }
+
+  const source = trigger.sourceName;
 
   updateState((state) => {
     state.activeRun = {
@@ -163,11 +229,19 @@ export async function runTarget({ config, target, trigger, group, dryRun = false
       return emit('skipped', 'working tree kirli (dirtyPolicy: skip)');
     }
 
+    // Content hashes of files that were already dirty before the run. Their
+    // `git status` code won't change even if the command edits them further,
+    // so `diffSnapshots` alone would miss that update — hash them up front to
+    // catch it (see `dirtyTouched` below).
+    const dirtyTrackedBefore = [...before.keys()].filter((p) => before.get(p)[0] !== '?');
+    const dirtyHashesBefore = dirtyTrackedBefore.length ? hashPaths(target.path, dirtyTrackedBefore) : null;
+
     const pkgList = derivePackageNames(config, target.path);
     const vars = {
       pkg: source,
       pkgList: pkgList.length ? pkgList : [source],
       sha: trigger.sha || '',
+      sources: trigger.sources && trigger.sources.length ? trigger.sources : undefined,
       sourcePath: trigger.sourcePath || '',
       sourceBranch: trigger.branch || '',
       targetPath: target.path,
@@ -184,12 +258,15 @@ export async function runTarget({ config, target, trigger, group, dryRun = false
       const result = await runShell(cmd, {
         cwd: target.path,
         timeoutMs: target.commandTimeout * 1000,
-        env: { CI: '1' }
+        env: { CI: '1' },
+        signal
       });
-      if (result.timedOut || result.code !== 0) {
-        const why = result.timedOut
-          ? `zaman aşımı (${target.commandTimeout}s)`
-          : `çıkış kodu ${result.code}`;
+      if (result.timedOut || result.aborted || result.code !== 0) {
+        const why = result.aborted
+          ? 'daemon kapatıldı, geri alındı'
+          : result.timedOut
+            ? `zaman aşımı (${target.commandTimeout}s)`
+            : `çıkış kodu ${result.code}`;
         const tail = (result.stderr || result.stdout || '').trim().split('\n').slice(-8).join('\n');
         logger.error(`[${label}] komut hatası: ${why}\n${tail}`);
         safeRollback(target.path, before, statusSnapshot(target.path));
@@ -204,7 +281,18 @@ export async function runTarget({ config, target, trigger, group, dryRun = false
     const { tracked, untracked } = diffSnapshots(before, after);
     const changed = [...tracked, ...untracked];
 
+    let dirtyTouched = [];
+    if (dirtyHashesBefore) {
+      const dirtyHashesAfter = hashPaths(target.path, dirtyTrackedBefore);
+      dirtyTouched = dirtyTrackedBefore.filter((p) => dirtyHashesAfter.get(p) !== dirtyHashesBefore.get(p));
+    }
+
     if (changed.length === 0) {
+      if (dirtyTouched.length > 0) {
+        const msg = `güncelleme önceden kirli dosyada kaldı, commit'lenmedi: ${dirtyTouched.join(', ')}`;
+        logger.warn(`[${label}] ${msg}`);
+        return emit('skipped', msg, { commands: ranCommands, dirtyTouched });
+      }
       logger.info(`[${label}] değişiklik yok (güncel)`);
       return emit('unchanged', 'değişiklik yok', { commands: ranCommands });
     }
@@ -220,6 +308,12 @@ export async function runTarget({ config, target, trigger, group, dryRun = false
         files: changed,
         dryRun: true
       });
+    }
+
+    if (dirtyTouched.length > 0) {
+      logger.warn(
+        `[${label}] güncelleme önceden kirli dosyada da devam etti, commit'e dahil edilmedi: ${dirtyTouched.join(', ')}`
+      );
     }
 
     const shortSha = selectiveCommit(target.path, changed, commitMsg);
@@ -257,7 +351,8 @@ export async function runTarget({ config, target, trigger, group, dryRun = false
       commands: ranCommands,
       commitSha: shortSha,
       files: changed,
-      pushed: Boolean(target.push)
+      pushed: Boolean(target.push),
+      ...(dirtyTouched.length ? { dirtyTouched } : {})
     });
   } finally {
     lock.release();

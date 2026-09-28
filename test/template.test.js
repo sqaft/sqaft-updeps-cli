@@ -35,6 +35,24 @@ test('commit mesajında {pkgs} tırnak yok, virgüllü', () => {
   );
 });
 
+test('{bumps} çoklu kaynak (coalesce edilmiş iş) listesi', () => {
+  const multi = {
+    ...base,
+    sources: [
+      { name: '@umbrella/api', sha: 'aaaaaaa1234567' },
+      { name: '@umbrella/web-client', sha: 'bbbbbbb1234567' }
+    ]
+  };
+  assert.equal(
+    interpolateMessage('bump {bumps}', multi),
+    'bump @umbrella/api@aaaaaaa, @umbrella/web-client@bbbbbbb'
+  );
+  assert.equal(
+    interpolateCommand('echo {bumps}', multi),
+    'echo @umbrella/api@aaaaaaa, @umbrella/web-client@bbbbbbb'
+  );
+});
+
 test('bilinmeyen placeholder korunur', () => {
   assert.equal(interpolateCommand('x {unknown} y', base), 'x {unknown} y');
 });

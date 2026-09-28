@@ -8,7 +8,8 @@ import {
   diffSnapshots,
   selectiveCommit,
   safeRollback,
-  checkPreconditions
+  checkPreconditions,
+  hashPaths
 } from '../src/gitops.js';
 import { git } from '../src/exec.js';
 
@@ -70,6 +71,52 @@ test('safeRollback kirli dosyaya dokunmaz, temiz-değişeni geri alır', () => {
     assert.equal(fs.readFileSync(path.join(dir, 'lock.json'), 'utf8'), 'A\n'); // geri alındı
     assert.equal(fs.readFileSync(path.join(dir, 'wip.txt'), 'utf8'), 'command clobber\n'); // dokunulmadı
     assert.ok(fs.existsSync(path.join(dir, 'new.txt'))); // takipsiz, silinmedi
+  } finally {
+    cleanup();
+  }
+});
+
+test('hashPaths: aynı status koduyla kalan ama içeriği değişen dosyayı yakalar', () => {
+  const { dir, cleanup } = tmpDir('updeps-git-');
+  try {
+    const { git: g } = initGitRepo(dir);
+    fs.writeFileSync(path.join(dir, 'lock.json'), '{"v":1}\n');
+    g(['add', '-A']);
+    g(['commit', '-qm', 'add lock']);
+
+    // kullanıcı zaten kirli bırakmış
+    fs.writeFileSync(path.join(dir, 'lock.json'), '{"v":2}\n');
+    const before = statusSnapshot(dir);
+    const dirtyPaths = [...before.keys()].filter((p) => before.get(p)[0] !== '?');
+    assert.deepEqual(dirtyPaths, ['lock.json']);
+    const hashesBefore = hashPaths(dir, dirtyPaths);
+
+    // "komut" aynı (zaten kirli) dosyayı bir kez daha değiştirir — status kodu ( M) aynı kalır
+    fs.writeFileSync(path.join(dir, 'lock.json'), '{"v":3}\n');
+    const after = statusSnapshot(dir);
+    assert.equal(before.get('lock.json'), after.get('lock.json')); // diffSnapshots bunu göremezdi
+    const { tracked, untracked } = diffSnapshots(before, after);
+    assert.deepEqual([...tracked, ...untracked], []); // mevcut mekanizma körü
+
+    const hashesAfter = hashPaths(dir, dirtyPaths);
+    const touched = dirtyPaths.filter((p) => hashesAfter.get(p) !== hashesBefore.get(p));
+    assert.deepEqual(touched, ['lock.json']);
+  } finally {
+    cleanup();
+  }
+});
+
+test('hashPaths: dosya değişmemişse aynı hash döner', () => {
+  const { dir, cleanup } = tmpDir('updeps-git-');
+  try {
+    const { git: g } = initGitRepo(dir);
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'sabit\n');
+    g(['add', '-A']);
+    g(['commit', '-qm', 'add a']);
+    const h1 = hashPaths(dir, ['a.txt']);
+    const h2 = hashPaths(dir, ['a.txt']);
+    assert.equal(h1.get('a.txt'), h2.get('a.txt'));
+    assert.ok(h1.get('a.txt'));
   } finally {
     cleanup();
   }

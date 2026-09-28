@@ -49,6 +49,7 @@ export async function runDaemon() {
 
   let config = loadConfig();
   logger.info(`Daemon başladı (pid ${process.pid}), ${config.repos.length} kaynak repo.`);
+  for (const w of config.warnings) logger.warn(`config: ${w}`);
 
   const queue = new UpdateQueue(config, {
     onGroupDone: ({ title, tally }) => {
@@ -67,6 +68,7 @@ export async function runDaemon() {
         return s;
       });
       logger.info(`Konfigürasyon yeniden yüklendi: ${config.repos.length} kaynak repo.`);
+      for (const w of config.warnings) logger.warn(`config: ${w}`);
     } catch (err) {
       logger.error(`Konfigürasyon yeniden yüklenemedi, eski ayarlar korunuyor: ${err.message}`);
     }
@@ -88,6 +90,7 @@ export async function runDaemon() {
   const shutdown = async (signal) => {
     logger.info(`${signal} alındı, kapanıyor...`);
     await watcher.stop();
+    await queue.shutdown(); // abort + await any in-flight command before releasing its lock
     releaseHeldLocks(); // don't strand an in-flight run's lock across a restart
     updateState((s) => {
       s.daemon = null;

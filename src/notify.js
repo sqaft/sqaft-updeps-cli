@@ -2,6 +2,24 @@ import { spawn, spawnSync } from 'node:child_process';
 import { logger } from './logger.js';
 import { redact } from './redact.js';
 
+/**
+ * Fire-and-forget spawn for a best-effort side effect (notification, SwiftBar
+ * refresh). The executable not existing surfaces as an *async* 'error' event
+ * on the child, not a thrown exception — an unhandled one crashes the whole
+ * process. Swallow it here so a missing terminal-notifier/osascript/open
+ * never takes the daemon down.
+ * @param {string} cmd
+ * @param {string[]} args
+ * @param {object} [opts]
+ */
+function spawnDetached(cmd, args, opts = {}) {
+  const child = spawn(cmd, args, { stdio: 'ignore', detached: true, ...opts });
+  child.on('error', () => {
+    /* best-effort: missing binary, permission issue, etc. */
+  });
+  child.unref();
+}
+
 let _hasTerminalNotifier = null;
 function hasTerminalNotifier() {
   if (_hasTerminalNotifier === null) {
@@ -41,16 +59,13 @@ export function sendNotification({ type, title, message, enabled = true }) {
 
   try {
     if (hasTerminalNotifier()) {
-      spawn('terminal-notifier', terminalNotifierArgs({ type, title, message }), {
-        stdio: 'ignore',
-        detached: true
-      }).unref();
+      spawnDetached('terminal-notifier', terminalNotifierArgs({ type, title, message }));
       return;
     }
     const script =
       `display notification ${asString(message)} with title ${asString(title)} ` +
       `subtitle ${asString(subtitle)} sound name ${asString(sound)}`;
-    spawn('osascript', ['-e', script], { stdio: 'ignore', detached: true }).unref();
+    spawnDetached('osascript', ['-e', script]);
   } catch (err) {
     logger.debug(`Bildirim gönderilemedi: ${err.message}`);
   }
@@ -69,7 +84,7 @@ function asString(s) {
  */
 export function refreshSwiftBar() {
   try {
-    spawn('open', ['-g', 'swiftbar://refreshplugin?name=updeps'], { stdio: 'ignore' }).unref();
+    spawnDetached('open', ['-g', 'swiftbar://refreshplugin?name=updeps'], { detached: false });
   } catch {
     /* ignore */
   }

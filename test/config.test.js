@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveConfig, validateConfig, ConfigError } from '../src/config.js';
+import { resolveConfig, validateConfig, collectWarnings, ConfigError } from '../src/config.js';
 
 test('geçersiz kök tipi net hata verir', () => {
   assert.throws(() => validateConfig([]), ConfigError);
@@ -43,6 +43,74 @@ test('defaults hedefe miras kalır, paket override eder', () => {
   assert.equal(t1.commandTimeout, 100);
   assert.deepEqual(t2.commands, ['yarn upgrade {pkgs}']);
   assert.equal(t2.push, true);
+});
+
+test('coalesce varsayılan olarak açık, paket düzeyinde override edilebilir', () => {
+  const cfg = resolveConfig({
+    repos: [
+      {
+        path: '~/src',
+        name: 'src',
+        packages: [{ path: '~/t1', name: 't1' }, { path: '~/t2', name: 't2', coalesce: false }]
+      }
+    ]
+  });
+  const [t1, t2] = cfg.repos[0].packages;
+  assert.equal(t1.coalesce, true);
+  assert.equal(t2.coalesce, false);
+});
+
+test('defaults.coalesce: false her pakete miras kalır', () => {
+  const cfg = resolveConfig({
+    defaults: { coalesce: false },
+    repos: [{ path: '~/src', name: 'src', packages: [{ path: '~/t1', name: 't1' }] }]
+  });
+  assert.equal(cfg.repos[0].packages[0].coalesce, false);
+});
+
+test('coalesce boolean olmayan değerde reddedilir', () => {
+  assert.throws(() => validateConfig({ defaults: { coalesce: 'yes' } }), /defaults\.coalesce/);
+  assert.throws(
+    () => validateConfig({ repos: [{ path: '~/a', packages: [{ path: '~/b', coalesce: 1 }] }] }),
+    /repos\[0\]\.packages\[0\]\.coalesce/
+  );
+});
+
+test('bilinmeyen alan (yazım hatası) hata vermez, uyarı olarak döner', () => {
+  const raw = {
+    defaults: { comands: ['npm update {pkgs}'] }, // 'commands' yazım hatası
+    repos: [
+      {
+        path: '~/a',
+        packages: [{ path: '~/b', comand: 'npm update' }] // 'commands' yazım hatası
+      }
+    ]
+  };
+  // yapısal olarak geçerli, throw etmez
+  assert.doesNotThrow(() => validateConfig(raw));
+
+  const warnings = collectWarnings(raw);
+  assert.ok(warnings.some((w) => w.includes('defaults.comands')));
+  assert.ok(warnings.some((w) => w.includes('repos[0].packages[0].comand')));
+
+  const cfg = resolveConfig(raw);
+  assert.deepEqual(cfg.warnings, warnings);
+  // yazım hatalı alan yoksayılır, varsayılan komut kullanılır
+  assert.deepEqual(cfg.repos[0].packages[0].commands, ['npm update {pkgs} --no-audit --no-fund']);
+});
+
+test('bilinen alanlarda uyarı üretilmez', () => {
+  const warnings = collectWarnings({
+    notifications: true,
+    defaults: { commands: ['x'], coalesce: false },
+    repos: [{ path: '~/a', name: 'a', packages: [{ path: '~/b', push: true }] }]
+  });
+  assert.deepEqual(warnings, []);
+});
+
+test('_ ile başlayan alanlar (yorum amaçlı) yoksayılır', () => {
+  const warnings = collectWarnings({ _comment: 'not', defaults: { _note: 'x' } });
+  assert.deepEqual(warnings, []);
 });
 
 test('~ ev dizinine genişler', () => {
