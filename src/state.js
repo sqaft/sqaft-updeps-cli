@@ -19,13 +19,7 @@ export function loadState() {
   try {
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
     const parsed = JSON.parse(raw);
-    const merged = { ...structuredClone(EMPTY_STATE), ...parsed };
-    // Drop keys from older schema versions (e.g. `activeRuns`, `errors`) so a
-    // stale file written by an old daemon can't shadow the current shape.
-    for (const key of Object.keys(merged)) {
-      if (!(key in EMPTY_STATE)) delete merged[key];
-    }
-    return merged;
+    return { ...structuredClone(EMPTY_STATE), ...parsed };
   } catch {
     return structuredClone(EMPTY_STATE);
   }

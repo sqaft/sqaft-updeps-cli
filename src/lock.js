@@ -95,7 +95,8 @@ export async function acquireLock(repoPath, options = {}) {
       if (err.code !== 'EEXIST') throw err;
 
       // Owner-dead check: a lock whose creating process is gone (crash, kill,
-      // daemon restart mid-run) is abandoned — reclaim it now, not in 15 min.
+      // daemon restart mid-run) is abandoned — reclaim it immediately instead
+      // of waiting for staleLockSec.
       try {
         const info = JSON.parse(fs.readFileSync(path.join(lockPath, 'info.json'), 'utf8'));
         if (info.pid && !pidAlive(info.pid)) {

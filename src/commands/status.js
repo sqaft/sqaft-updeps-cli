@@ -41,7 +41,7 @@ function render() {
   // What's running right now
   L.push(styleText('bold', 'Şu an'));
   const active = state.activeRun;
-  const jobs = state.queue?.jobs || [];
+  const jobs = state.queue.jobs;
   if (active) {
     const tag = active.dryRun ? styleText('dim', ' [dry-run]') : '';
     L.push(
@@ -63,7 +63,7 @@ function render() {
   L.push('');
 
   // Open failures (persist until resolved)
-  const failures = state.openFailures || [];
+  const failures = state.openFailures;
   L.push(styleText('bold', failures.length ? styleText('red', `Açık hatalar (${failures.length})`) : 'Açık hatalar'));
   if (failures.length === 0) {
     L.push(styleText('green', '  ✓ yok'));
@@ -79,7 +79,7 @@ function render() {
 
   // Recent run groups
   L.push(styleText('bold', 'Son çalışmalar'));
-  const runs = (state.lastRuns || []).slice(0, 10);
+  const runs = state.lastRuns.slice(0, 10);
   if (runs.length === 0) L.push(styleText('dim', '  yok'));
   for (const r of runs) {
     const bits = [`${r.committed} commit`, `${r.unchanged} güncel`];

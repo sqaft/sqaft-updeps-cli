@@ -86,14 +86,13 @@ export async function runTarget({ config, target, trigger, group, dryRun = false
     });
 
     updateState((state) => {
-      state.openFailures = state.openFailures || [];
       if (status === 'failed') {
         const existing = state.openFailures.find((f) => f.id === id);
         if (existing) {
           existing.message = message;
           existing.errorTail = extra.errorTail || '';
           existing.lastSeen = Date.now();
-          existing.count = (existing.count || 1) + 1;
+          existing.count += 1;
           existing.group = groupId;
         } else {
           state.openFailures.unshift({
@@ -367,7 +366,7 @@ export function recordGroupDone({ sourceRepo, trigger, tally }) {
         failed: tally.failed,
         skipped: tally.skipped
       },
-      ...(state.lastRuns || [])
+      ...state.lastRuns
     ].slice(0, 50);
     if (trigger.sha && sourceRepo.path) {
       state.repos[sourceRepo.path] = {

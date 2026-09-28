@@ -12,7 +12,7 @@ export function cmdLogs(opts = {}) {
     process.exit(1);
   }
 
-  const n = parseInt(opts.lines ?? opts.n ?? 100, 10) || 100;
+  const n = parseInt(opts.lines ?? 100, 10) || 100;
 
   if (opts.follow) {
     // pipe through redaction rather than exec'ing `tail -f` directly

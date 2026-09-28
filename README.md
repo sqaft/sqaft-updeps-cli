@@ -235,8 +235,6 @@ npm test        # node:test, ek bağımlılık yok
 
 ## Notlar
 
-- Eski `maxConcurrent` / `globalMaxConcurrent` alanları global seri kuyruk
-  nedeniyle işlevsizdir; config'de bulunurlarsa yok sayılır (hata değil, uyarı).
 - Komut `.gitignore`'lu bir dosyayı (`node_modules/` gibi) değiştirirse
   `git status`'ta görünmez — bu istenen davranıştır. Komut hiç izlenen dosya
   değiştirmezse sonuç "güncel" (unchanged) olur.

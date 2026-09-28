@@ -33,13 +33,12 @@ test('config değişince onConfigChange tetiklenir — ardışık atomik yazmala
   watcher.start();
   await sleep(100);
 
-  // saveConfig() replaces the file via write-temp + rename — the case that
-  // silently broke a single-file watch.
+  // saveConfig() replaces the file via write-temp + rename (the inode changes).
   saveConfig({ ...baseConfig(), notifications: true });
   for (let i = 0; i < 40 && reloads < 1; i++) await sleep(50);
   assert.equal(reloads, 1, 'ilk değişiklik yeniden yükleme tetiklemeli');
 
-  // Second write: the regression — the watch must still be live.
+  // Second write: the watch must still be live after the inode swap.
   saveConfig({ ...baseConfig(), notifications: false });
   for (let i = 0; i < 40 && reloads < 2; i++) await sleep(50);
   assert.equal(reloads, 2, 'ikinci değişiklik de tetiklenmeli');

@@ -19,7 +19,7 @@ export async function cmdRetry(positionals, opts = {}) {
   const state = loadState();
   const selector = positionals[0];
 
-  let failures = state.openFailures || [];
+  let failures = state.openFailures;
   if (!opts.failed && !selector) {
     console.error('Kullanım: updeps retry --failed   |   updeps retry <hedef|kaynak>');
     process.exit(1);

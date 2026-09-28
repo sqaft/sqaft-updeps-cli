@@ -28,10 +28,7 @@ function buildMap(vars) {
     sourcePath: vars.sourcePath || '',
     sourceBranch: vars.sourceBranch || '',
     targetPath: vars.targetPath || '',
-    targetBranch: vars.targetBranch || '',
-    // aliases kept for familiarity with the old hook
-    branch: vars.targetBranch || '',
-    repoPath: vars.targetPath || ''
+    targetBranch: vars.targetBranch || ''
   };
 }
 

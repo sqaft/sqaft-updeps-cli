@@ -169,12 +169,8 @@ export function startAgent() {
   const domain = `gui/${uid}`;
 
   launchctl(['bootout', domain, LAUNCH_AGENT_PLIST]); // ignore result
-  let res = launchctl(['bootstrap', domain, LAUNCH_AGENT_PLIST]);
-  if (!res.ok) {
-    // older macOS
-    res = launchctl(['load', '-w', LAUNCH_AGENT_PLIST]);
-    if (!res.ok) throw new Error(`launchctl başarısız: ${res.stderr.trim()}`);
-  }
+  const res = launchctl(['bootstrap', domain, LAUNCH_AGENT_PLIST]);
+  if (!res.ok) throw new Error(`launchctl başarısız: ${res.stderr.trim()}`);
   return LAUNCH_AGENT_PLIST;
 }
 
@@ -185,7 +181,6 @@ export function stopAgent() {
   const uid = os.userInfo().uid;
   const domain = `gui/${uid}`;
   launchctl(['bootout', domain, LAUNCH_AGENT_PLIST]);
-  launchctl(['unload', '-w', LAUNCH_AGENT_PLIST]);
 
   const pid = runningDaemonPid();
   if (pid) {

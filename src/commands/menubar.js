@@ -20,10 +20,10 @@ export function cmdMenubar(opts = {}) {
   const state = loadState();
   const pid = runningDaemonPid();
 
-  const lastRun = (state.lastRuns || [])[0];
-  const failures = state.openFailures || [];
+  const lastRun = state.lastRuns[0];
+  const failures = state.openFailures;
   const active = state.activeRun;
-  const queued = state.queue?.jobs || [];
+  const queued = state.queue.jobs;
 
   // Menu bar title line
   const inFlight = queued.length + (active ? 1 : 0); // running + waiting
@@ -155,17 +155,6 @@ function install() {
 exec "${process.execPath}" "${BIN_PATH}" menubar
 `;
   fs.writeFileSync(pluginPath, script, { mode: 0o755 });
-
-  // Remove stale copies an older `--install` may have left in the wrong place.
-  const stale = path.join(os.homedir(), 'Library', 'Application Support', 'SwiftBar', 'updeps.30s.sh');
-  if (stale !== pluginPath && fs.existsSync(stale)) {
-    try {
-      fs.rmSync(stale);
-      console.log(styleText('dim', `Eski kopya silindi: ${tildify(stale)}`));
-    } catch {
-      /* ignore */
-    }
-  }
 
   console.log(styleText('green', `Kuruldu: ${pluginPath}`) + styleText('dim', ` (${found ? found.source : 'yeni klasör'})`));
   console.log(styleText('dim', 'SwiftBar menüsünden "Refresh All" ile görünür.'));

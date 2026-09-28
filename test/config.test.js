@@ -23,15 +23,6 @@ test('geçersiz trigger reddedilir', () => {
   );
 });
 
-test('maxConcurrent yok sayılır, hata vermez', () => {
-  const cfg = resolveConfig({
-    defaults: { maxConcurrent: 3, globalMaxConcurrent: 5 },
-    repos: [{ path: '~/a', name: 'a', maxConcurrent: 9, packages: [{ path: '~/b', name: 'b' }] }]
-  });
-  assert.equal(cfg.defaults.maxConcurrent, undefined);
-  assert.equal(cfg.repos[0].maxConcurrent, undefined);
-});
-
 test('defaults hedefe miras kalır, paket override eder', () => {
   const cfg = resolveConfig({
     defaults: { commands: ['npm update {pkgs}'], commitMessage: 'x', push: false, commandTimeout: 100 },

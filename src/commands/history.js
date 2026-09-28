@@ -26,10 +26,10 @@ function shortTime(iso) {
 }
 
 /**
- * @param {{ failed?: boolean, repo?: string, since?: string, json?: boolean, lines?: string|number, n?: string|number }} opts
+ * @param {{ failed?: boolean, repo?: string, since?: string, json?: boolean, lines?: string|number }} opts
  */
 export function cmdHistory(opts = {}) {
-  const limit = parseInt(opts.lines ?? opts.n ?? 50, 10) || 50;
+  const limit = parseInt(opts.lines ?? 50, 10) || 50;
   const sinceMs = opts.since ? parseSince(opts.since) : 0;
 
   const records = readEvents({

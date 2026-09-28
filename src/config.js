@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE, resolveHome } from './paths.js';
-import { logger } from './logger.js';
 
 export const VALID_TRIGGERS = ['push', 'fetch', 'commit', 'merge'];
 export const VALID_DIRTY_POLICIES = ['selective', 'skip'];
@@ -18,9 +17,6 @@ export const DEFAULT_VALUES = {
   dirtyPolicy: 'selective',
   push: false
 };
-
-/** Keys that used to exist but are no longer meaningful (global serial queue). */
-const IGNORED_KEYS = ['maxConcurrent', 'globalMaxConcurrent'];
 
 class ConfigError extends Error {}
 
@@ -65,23 +61,6 @@ function assertEnum(value, fieldPath, allowed) {
 }
 
 /**
- * Warns once (per process) about keys that are accepted but ignored.
- * @param {object} obj
- * @param {string} fieldPath
- */
-let ignoredWarned = false;
-function warnIgnoredKeys(obj, fieldPath) {
-  for (const key of IGNORED_KEYS) {
-    if (obj && obj[key] !== undefined && !ignoredWarned) {
-      ignoredWarned = true;
-      logger.warn(
-        `"${fieldPath}.${key}" alanı artık kullanılmıyor (global seri kuyruk nedeniyle) ve yok sayılıyor.`
-      );
-    }
-  }
-}
-
-/**
  * Validates a raw parsed config object. Throws ConfigError with a field path.
  * @param {unknown} raw
  */
@@ -106,7 +85,6 @@ export function validateConfig(raw) {
     assertPositiveNumber(d.waitTimeoutSec, 'defaults.waitTimeoutSec', { allowZero: true });
     assertEnum(d.dirtyPolicy, 'defaults.dirtyPolicy', VALID_DIRTY_POLICIES);
     assertBoolean(d.push, 'defaults.push');
-    warnIgnoredKeys(d, 'defaults');
   }
 
   if (raw.repos !== undefined) {
@@ -122,7 +100,6 @@ export function validateConfig(raw) {
       (repo.triggers || []).forEach((t, i) =>
         assertEnum(t, `${rp}.triggers[${i}]`, VALID_TRIGGERS)
       );
-      warnIgnoredKeys(repo, rp);
 
       if (repo.packages !== undefined) {
         if (!Array.isArray(repo.packages)) fail(`${rp}.packages`, 'bir dizi olmalı.');
@@ -143,7 +120,6 @@ export function validateConfig(raw) {
           assertPositiveNumber(pkg.waitTimeoutSec, `${pp}.waitTimeoutSec`, { allowZero: true });
           assertEnum(pkg.dirtyPolicy, `${pp}.dirtyPolicy`, VALID_DIRTY_POLICIES);
           assertBoolean(pkg.push, `${pp}.push`);
-          warnIgnoredKeys(pkg, pp);
         });
       }
     });
@@ -160,7 +136,6 @@ export function resolveConfig(raw) {
   validateConfig(raw);
 
   const defaults = { ...DEFAULT_VALUES, ...(raw.defaults || {}) };
-  for (const key of IGNORED_KEYS) delete defaults[key];
 
   const notifications = raw.notifications !== undefined ? Boolean(raw.notifications) : true;
 
