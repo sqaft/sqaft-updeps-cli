@@ -91,12 +91,12 @@ kılmaz — sessizce yok sayılıp varsayılana düşmek yerine `updeps doctor`
   "repos": [
     {
       "path": "~/workspace/acme/acme-api",
-      "name": "@acme/api",         // paket yöneticisindeki bağımlılık adı ({pkg}/{pkgs})
+      "name": "@acme/api",                // paket yöneticisindeki bağımlılık adı ({pkg}/{pkgs})
       "branches": ["main"],               // opsiyonel, kaynağa özel
       "packages": [
         {
-          "path": "~/workspace/acme/acme-app",
-          "name": "acme-app",       // sadece etiket (log/bildirim); verilmezse klasör adı
+          "path": "~/workspace/acme/acme-worker",
+          "name": "acme-worker",          // sadece etiket (log/bildirim); verilmezse klasör adı
           "commands": ["yarn upgrade {pkgs}"],
           "commitMessage": "deps: {bumps}",
           "push": false,
