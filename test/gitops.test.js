@@ -9,7 +9,9 @@ import {
   selectiveCommit,
   safeRollback,
   checkPreconditions,
-  hashPaths
+  hashPaths,
+  upstreamStatus,
+  remoteTip
 } from '../src/gitops.js';
 import { git } from '../src/exec.js';
 
@@ -139,6 +141,41 @@ test('checkPreconditions git olmayan dizini reddeder', () => {
   try {
     assert.equal(checkPreconditions(dir).ok, false);
     assert.equal(checkPreconditions('/nonexistent/xyz').ok, false);
+  } finally {
+    cleanup();
+  }
+});
+
+test('upstreamStatus / remoteTip: upstream yok, ahead sayısı, detached', () => {
+  const { dir, cleanup } = tmpDir('updeps-git-');
+  try {
+    const remote = path.join(dir, 'remote.git');
+    const work = path.join(dir, 'work');
+    fs.mkdirSync(remote);
+    git(['init', '-q', '--bare', '-b', 'main'], remote);
+    const { git: g } = initGitRepo(work);
+
+    assert.equal(upstreamStatus(work), null); // upstream tanımsız
+    assert.equal(remoteTip(work, 'origin', 'main'), null);
+
+    g(['remote', 'add', 'origin', remote]);
+    g(['push', '-q', '-u', 'origin', 'main']);
+    assert.deepEqual(upstreamStatus(work), { branch: 'main', remote: 'origin', remoteBranch: 'main', ahead: 0 });
+    assert.equal(remoteTip(work, 'origin', 'main'), g(['rev-parse', 'HEAD']));
+
+    fs.writeFileSync(path.join(work, 'f.txt'), '1\n');
+    g(['add', '-A']);
+    g(['commit', '-qm', 'one']);
+    fs.writeFileSync(path.join(work, 'f.txt'), '2\n');
+    g(['commit', '-aqm', 'two']);
+    assert.equal(upstreamStatus(work).ahead, 2);
+
+    // yerel branch adı upstream adından farklı olabilir
+    g(['checkout', '-q', '-b', 'feature', '--track', 'origin/main']);
+    assert.deepEqual(upstreamStatus(work), { branch: 'feature', remote: 'origin', remoteBranch: 'main', ahead: 0 });
+
+    g(['checkout', '-q', '--detach']);
+    assert.equal(upstreamStatus(work), null);
   } finally {
     cleanup();
   }

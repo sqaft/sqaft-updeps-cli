@@ -8,6 +8,30 @@ import { defaultBranch } from './gitops.js';
 import { updateState } from './state.js';
 
 /**
+ * Branches of a source repo whose remote-tracking reflogs the daemon watches.
+ * @param {{ path: string, branches: string[] }} repo resolved source repo
+ * @returns {string[]}
+ */
+export function watchedBranches(repo) {
+  return repo.branches.length > 0 ? repo.branches : [defaultBranch(repo.path)];
+}
+
+/**
+ * True when the daemon reacts to a push of `remote/branch` on this source repo:
+ * the push lands in a watched `origin` reflog and at least one target listens
+ * for the `push` trigger.
+ * @param {{ path: string, branches: string[], packages: Array<{ triggers: string[] }> }} repo resolved source repo
+ * @param {string} remote
+ * @param {string} branch
+ * @returns {boolean}
+ */
+export function watchesPush(repo, remote, branch) {
+  if (remote !== 'origin') return false;
+  if (!repo.packages.some((p) => p.triggers.includes('push'))) return false;
+  return watchedBranches(repo).includes(branch);
+}
+
+/**
  * Watches the minimal set of reflog files implied by the config and forwards
  * classified events to the queue. Also watches the config file for live reload.
  */
@@ -44,8 +68,7 @@ export class ReflogWatcher {
       const triggers = new Set();
       for (const pkg of repo.packages) for (const t of pkg.triggers) triggers.add(t);
 
-      const branches =
-        repo.branches.length > 0 ? repo.branches : [defaultBranch(repo.path)];
+      const branches = watchedBranches(repo);
 
       const wantRemote = triggers.has('push') || triggers.has('fetch');
       const wantLocal = triggers.has('commit') || triggers.has('merge');

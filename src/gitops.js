@@ -152,6 +152,40 @@ export function activeBranch(cwd) {
 }
 
 /**
+ * Where the checked-out branch pushes to and how many commits it is ahead of
+ * that remote-tracking ref (as last seen locally; nothing is fetched).
+ * `null` when HEAD is detached, the branch has no upstream, or the upstream
+ * ref no longer exists.
+ * @param {string} cwd
+ * @returns {{ branch: string, remote: string, remoteBranch: string, ahead: number }|null}
+ */
+export function upstreamStatus(cwd) {
+  const branch = git(['symbolic-ref', '--short', '-q', 'HEAD'], cwd, '');
+  if (!branch) return null;
+  const info = git(
+    ['for-each-ref', '--format=%(upstream:remotename)%09%(upstream:remoteref)', `refs/heads/${branch}`],
+    cwd,
+    ''
+  );
+  const [remote, ref] = info.split('\t');
+  if (!remote || remote === '.' || !ref) return null;
+  const count = git(['rev-list', '--count', '@{u}..HEAD'], cwd, '');
+  if (count === '') return null;
+  return { branch, remote, remoteBranch: ref.replace(/^refs\/heads\//, ''), ahead: parseInt(count, 10) };
+}
+
+/**
+ * Full sha of a remote-tracking ref (`refs/remotes/<remote>/<branch>`), or null.
+ * @param {string} cwd
+ * @param {string} remote
+ * @param {string} branch
+ * @returns {string|null}
+ */
+export function remoteTip(cwd, remote, branch) {
+  return git(['rev-parse', '--verify', '-q', `refs/remotes/${remote}/${branch}`], cwd, '') || null;
+}
+
+/**
  * Default branch as recorded by origin/HEAD, falling back to 'main'.
  * @param {string} cwd
  * @returns {string}

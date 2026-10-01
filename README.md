@@ -162,7 +162,47 @@ takipli dosyalar geri alınır. `git reset --hard` / `git clean -fd` hiçbir ko�
 `push: true` yaparsan hedefe atılan commit push edilir; bu da o hedefi kaynak
 olarak listeleyen başka repoları tetikler (zincirleme). Genellikle istenmeyen bir
 durumdur; varsayılan `false`. `updeps graph` ve `updeps doctor` bağımlılık
-döngülerini (cycle) uyarır.
+döngülerini (cycle) uyarır. Zinciri kendi elinle ve kontrollü yürütmek için
+`updeps push` kullan (aşağıda).
+
+---
+
+## Zincirleme push (`updeps push`)
+
+Birden çok repoda push edilmemiş commit biriktiğinde, rastgele sırayla push
+etmek aynı hedefin birden çok kez güncellenmesine yol açar: `A → B → C`
+zincirinde B, A'nın güncellemesini almadan push edilirse C iki kez güncellenir.
+`updeps push` bunu tek güncellemeye indirir:
+
+```bash
+cd ~/workspace/acme       # repo içinde ya da repoları barındıran bir dizinde
+updeps push --dry-run     # kapsam + tahmini turlar, hiçbir şey push etmez
+updeps push
+```
+
+Kapsam: bulunduğun dizin bir repoysa (alt dizini de olur) yalnızca o repo;
+değilse altındaki tüm git repoları (`node_modules`, `vendor` ve `.` ile başlayan
+dizinler hariç, bulunan reponun içine inilmez). Config'te olmayan repolar da
+push edilir; sıra config'teki kaynak → hedef ilişkilerinden çıkarılır.
+Upstream'i olmayan ya da detached HEAD'deki repolar atlanır.
+
+Her tur:
+
+1. Push edilmemiş commit'i olan repolar arasından, (transitif) kaynaklarından
+   hiçbiri push bekleyenler arasında olmayanlar push edilir. Yukarıdaki örnekte
+   A, B ve C'nin üçünde de commit varsa önce yalnızca A push edilir.
+2. Daemon'un bu push'ları işlemesi beklenir: ilgili kaynakların `origin`
+   ucu `state.json`'daki `lastProcessedSha` ile eşleşene, çalışan iş ve
+   kuyruk kalmayana kadar. Daemon'un kendi `push: true` push'ları da beklenir.
+3. Daemon'un attığı güncelleme commit'leri yeni push edilmemiş commit olarak
+   görünür; B artık hem kendi commit'iyle hem A'dan gelen güncellemeyle tek
+   seferde push edilir. Push edilecek commit kalmayana kadar tekrarlanır.
+
+Başlamadan önce daemon çalışıyor olmalıdır (`updeps start`). Bir push başarısız
+olursa, daemon bir hedefi güncelleyemezse (`failed`) ya da daemon push'u
+işlemezse komut durur ve `1` ile çıkar; sorunu giderip tekrar çalıştırınca
+kaldığı yerden devam eder. Hiçbir `fetch`/`pull`/rebase yapılmaz: remote
+ilerideyse push reddedilir ve komut durur.
 
 ---
 
@@ -177,6 +217,7 @@ döngülerini (cycle) uyarır.
 | `updeps remove <kaynak> [hedef]` | İlişkiyi veya kaynağı siler |
 | `updeps run [kaynak] [--target X] [--dry-run]` | Manuel çalıştırma (tetikleyici/branch filtrelerini atlar) |
 | `updeps retry --failed` \| `updeps retry <hedef>` | Açık hataları yeniden dener |
+| `updeps push [--dry-run]` | Bulunduğun dizindeki (repo içindeyse o repo, değilse altındaki tüm repolar) push edilmemiş commit'leri bağımlılık sırasıyla push eder ve her turda daemon'un güncellemelerini bekler. Bkz. "Zincirleme push" |
 | `updeps status [-w/--watch]` | Şu an ne çalışıyor + kuyruktaki hedefler, **açık hatalar**, son çalışmalar. `--watch` = saniyede bir yenilenen canlı görünüm |
 | `updeps history [--failed] [--repo X] [--since 2d] [-n N] [--json]` | Tüm işlem geçmişi (kalıcı JSONL günlüğünden) |
 | `updeps show <grup-id \| hedef \| kaynak>` | Bir çalışmanın tam detayı: komutlar, çıktı, commit SHA, hata çıktısı |
