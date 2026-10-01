@@ -138,3 +138,18 @@ test('kullanıcının örnek dosyası geçerli', async () => {
   );
   assert.doesNotThrow(() => resolveConfig(raw));
 });
+
+test('squash varsayılan olarak açık, defaults ve paket düzeyinde override edilebilir', () => {
+  const on = resolveConfig({ repos: [{ path: '~/s', packages: [{ path: '~/t' }] }] });
+  assert.equal(on.repos[0].packages[0].squash, true);
+
+  const off = resolveConfig({
+    defaults: { squash: false },
+    repos: [{ path: '~/s', packages: [{ path: '~/t1' }, { path: '~/t2', squash: true }] }]
+  });
+  assert.equal(off.repos[0].packages[0].squash, false);
+  assert.equal(off.repos[0].packages[1].squash, true);
+
+  assert.throws(() => validateConfig({ defaults: { squash: 'yes' } }), /defaults\.squash/);
+  assert.deepEqual(collectWarnings({ defaults: { squash: true } }), []);
+});

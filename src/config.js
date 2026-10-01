@@ -16,7 +16,8 @@ export const DEFAULT_VALUES = {
   waitTimeoutSec: 0,
   dirtyPolicy: 'selective',
   push: false,
-  coalesce: true
+  coalesce: true,
+  squash: true
 };
 
 class ConfigError extends Error {}
@@ -87,6 +88,7 @@ export function validateConfig(raw) {
     assertEnum(d.dirtyPolicy, 'defaults.dirtyPolicy', VALID_DIRTY_POLICIES);
     assertBoolean(d.push, 'defaults.push');
     assertBoolean(d.coalesce, 'defaults.coalesce');
+    assertBoolean(d.squash, 'defaults.squash');
   }
 
   if (raw.repos !== undefined) {
@@ -123,6 +125,7 @@ export function validateConfig(raw) {
           assertEnum(pkg.dirtyPolicy, `${pp}.dirtyPolicy`, VALID_DIRTY_POLICIES);
           assertBoolean(pkg.push, `${pp}.push`);
           assertBoolean(pkg.coalesce, `${pp}.coalesce`);
+          assertBoolean(pkg.squash, `${pp}.squash`);
         });
       }
     });
@@ -141,7 +144,8 @@ const KNOWN_DEFAULTS_KEYS = new Set([
   'waitTimeoutSec',
   'dirtyPolicy',
   'push',
-  'coalesce'
+  'coalesce',
+  'squash'
 ]);
 const KNOWN_REPO_KEYS = new Set(['path', 'name', 'branches', 'triggers', 'packages']);
 const KNOWN_PACKAGE_KEYS = new Set([
@@ -156,7 +160,8 @@ const KNOWN_PACKAGE_KEYS = new Set([
   'waitTimeoutSec',
   'dirtyPolicy',
   'push',
-  'coalesce'
+  'coalesce',
+  'squash'
 ]);
 
 function unknownKeysOf(obj, known) {
@@ -226,7 +231,8 @@ export function resolveConfig(raw) {
         waitTimeoutSec: pkg.waitTimeoutSec ?? defaults.waitTimeoutSec,
         dirtyPolicy: pkg.dirtyPolicy ?? defaults.dirtyPolicy,
         push: pkg.push !== undefined ? Boolean(pkg.push) : Boolean(defaults.push),
-        coalesce: pkg.coalesce !== undefined ? Boolean(pkg.coalesce) : Boolean(defaults.coalesce)
+        coalesce: pkg.coalesce !== undefined ? Boolean(pkg.coalesce) : Boolean(defaults.coalesce),
+        squash: pkg.squash !== undefined ? Boolean(pkg.squash) : Boolean(defaults.squash)
       };
     });
 

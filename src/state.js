@@ -9,6 +9,7 @@ const EMPTY_STATE = {
   activeRun: null,    // { group, source, target, targetPath, startedAt } — what is running right now
   queue: { pending: 0, jobs: [] }, // { pending, jobs:[{ target, targetPath, sources:[name] }] } — waiting behind activeRun
   daemon: null,       // { pid, startedAt, watchedRepos }
+  autoCommits: {},    // targetPath -> [{ sha, branch, sources:[{name,sha}] }] commits updeps made (newest first); only these may be squashed into a later update
   reflogTips: {}      // reflogFilePath -> last-seen sha; lets the watcher catch up on pushes made while the daemon was down
 };
 

@@ -20,6 +20,7 @@ function execKey(target) {
     commandTimeout: target.commandTimeout,
     dirtyPolicy: target.dirtyPolicy,
     push: target.push,
+    squash: target.squash,
     staleLockSec: target.staleLockSec,
     waitTimeoutSec: target.waitTimeoutSec
   });

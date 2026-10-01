@@ -11,9 +11,11 @@ import {
   selectiveCommit,
   safeRollback,
   activeBranch,
-  hashPaths
+  hashPaths,
+  squashableChain,
+  squashOnto
 } from './gitops.js';
-import { updateState } from './state.js';
+import { loadState, updateState } from './state.js';
 import { appendEvent } from './journal.js';
 import { redact } from './redact.js';
 import { sendNotification, refreshSwiftBar } from './notify.js';
@@ -145,6 +147,68 @@ export function recordTargetResult({ target, trigger, group, status, rawMessage,
 
   if (status === 'failed') logger.error(`[${label}] ${message}`);
   return { status, target: label, message };
+}
+
+const MAX_RECORDED_COMMITS = 50;
+
+/** Sources behind one update commit, as `{bumps}` lists them. */
+function currentSources(vars) {
+  return vars.sources && vars.sources.length ? vars.sources : [{ name: vars.pkg, sha: vars.sha }];
+}
+
+/**
+ * Folds the unpushed commits updeps made earlier in this repo into the commit
+ * that was just created (HEAD), so repeated updates leave one commit instead
+ * of one per update. Only commits recorded in `state.autoCommits` and sitting
+ * directly below HEAD are folded (see `squashableChain` for the rules); the
+ * result has the same tree as HEAD, so file content is unaffected. Never
+ * throws: any problem leaves the just-made commit as it is.
+ * @param {object} target
+ * @param {object} vars  template variables of this run
+ * @returns {{ sha: string, message: string, sources: Array<{name:string, sha:string}>, replaced: string[] }|null}
+ */
+function foldPreviousCommits(target, vars) {
+  try {
+    const cwd = target.path;
+    const branch = git(['symbolic-ref', '--short', '-q', 'HEAD'], cwd, '');
+    const newSha = git(['rev-parse', 'HEAD'], cwd, '');
+    const parent = git(['rev-parse', '--verify', '-q', 'HEAD^'], cwd, '');
+    if (!branch || !newSha || !parent) return null;
+
+    const chain = squashableChain(cwd, branch, parent, loadState().autoCommits[cwd] || []);
+    if (!chain) return null;
+
+    // oldest first; a source that bumped more than once keeps its latest sha
+    const merged = new Map();
+    for (const commit of [...chain.commits].reverse()) {
+      for (const s of commit.sources || []) merged.set(s.name, s.sha);
+    }
+    for (const s of currentSources(vars)) merged.set(s.name, s.sha);
+    const sources = [...merged].map(([name, sha]) => ({ name, sha }));
+
+    const message = interpolateMessage(target.commitMessage, { ...vars, sources });
+    const sha = squashOnto(cwd, { branch, base: chain.base, newSha, message });
+    if (!sha) return null;
+    return { sha, message, sources, replaced: [...chain.commits.map((c) => c.sha), newSha] };
+  } catch (err) {
+    logger.warn(`[${target.name}] önceki commit'ler birleştirilemedi, ayrı commit olarak bırakıldı: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Remembers a commit updeps made so a later update may fold it.
+ * @param {string} targetPath
+ * @param {{ sha: string, branch: string, sources: object[] }} entry
+ * @param {string[]} [replaced]  shas that no longer exist (squashed away)
+ */
+function recordAutoCommit(targetPath, entry, replaced = []) {
+  updateState((state) => {
+    const gone = new Set(replaced);
+    const prior = (state.autoCommits[targetPath] || []).filter((e) => e.sha !== entry.sha && !gone.has(e.sha));
+    state.autoCommits[targetPath] = [entry, ...prior].slice(0, MAX_RECORDED_COMMITS);
+    return state;
+  });
 }
 
 /**
@@ -297,7 +361,7 @@ export async function runTarget({
       return emit('unchanged', 'değişiklik yok', { commands: ranCommands });
     }
 
-    const commitMsg = interpolateMessage(target.commitMessage, vars);
+    let commitMsg = interpolateMessage(target.commitMessage, vars);
 
     if (dryRun) {
       const stat = git(['diff', '--stat'], target.path, '');
@@ -316,8 +380,27 @@ export async function runTarget({
       );
     }
 
-    const shortSha = selectiveCommit(target.path, changed, commitMsg);
+    let shortSha = selectiveCommit(target.path, changed, commitMsg);
     logger.info(`[${label}] commit ${shortSha}: "${commitMsg}" (${changed.length} dosya)`);
+
+    // Remember the commit; fold earlier unpushed updeps commits into it if allowed.
+    const branch = git(['symbolic-ref', '--short', '-q', 'HEAD'], target.path, '');
+    let sources = currentSources(vars);
+    let replaced = [];
+    const folded = target.squash ? foldPreviousCommits(target, vars) : null;
+    if (folded) {
+      shortSha = git(['rev-parse', '--short', folded.sha], target.path, folded.sha.slice(0, 7));
+      commitMsg = folded.message;
+      sources = folded.sources;
+      replaced = folded.replaced;
+      logger.info(
+        `[${label}] ${replaced.length} commit tek commit'e birleştirildi → ${shortSha}: "${commitMsg}"`
+      );
+    }
+    if (branch) {
+      const headSha = git(['rev-parse', 'HEAD'], target.path, '');
+      if (headSha) recordAutoCommit(target.path, { sha: headSha, branch, sources }, replaced);
+    }
 
     if (target.push) {
       logger.info(`[${label}] git push...`);
@@ -327,7 +410,8 @@ export async function runTarget({
       } catch (err) {
         return emit('failed', `commit atıldı ama push başarısız: ${err.message}`, {
           commands: ranCommands,
-          commitSha: shortSha
+          commitSha: shortSha,
+          ...(replaced.length ? { squashed: replaced.map((s) => s.slice(0, 7)) } : {})
         });
       }
     }
@@ -352,6 +436,7 @@ export async function runTarget({
       commitSha: shortSha,
       files: changed,
       pushed: Boolean(target.push),
+      ...(replaced.length ? { squashed: replaced.map((s) => s.slice(0, 7)) } : {}),
       ...(dirtyTouched.length ? { dirtyTouched } : {})
     });
   } finally {

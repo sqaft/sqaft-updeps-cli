@@ -68,6 +68,7 @@ export function cmdShow(positionals) {
     if (t.status === 'committed') {
       console.log(`    ${t.commitSha ? t.commitSha + ' ' : ''}${t.message}`);
       if (t.files) console.log(styleText('dim', `    dosyalar: ${t.files.join(', ')}`));
+      if (t.squashed) console.log(styleText('dim', `    birleştirilen commit'ler: ${t.squashed.join(', ')}`));
       if (t.pushed) console.log(styleText('dim', '    push edildi'));
     } else if (t.status === 'failed') {
       console.log(`    ${styleText('red', t.message)}`);

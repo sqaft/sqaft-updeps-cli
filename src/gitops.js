@@ -85,6 +85,88 @@ export function selectiveCommit(cwd, paths, message) {
   return git(['rev-parse', '--short', 'HEAD'], cwd, '');
 }
 
+const MAX_SQUASH_CHAIN = 50;
+
+/**
+ * The commits updeps made earlier that can safely be folded into a new commit
+ * sitting right above `tipSha`: the unbroken run of `recorded` commits ending
+ * at `tipSha`, newest first. A commit qualifies only when it
+ * - is one updeps recorded itself (exact sha, so any amend/rebase/cherry-pick
+ *   by the user makes it ineligible),
+ * - has exactly one parent and is not reachable from any remote-tracking ref
+ *   (never pushed),
+ * and the run is dropped entirely when another local branch or a tag also
+ * contains its oldest commit. Commits of the user are never part of the run:
+ * it ends at the first commit that updeps did not make.
+ * @param {string} cwd
+ * @param {string} branch   checked-out branch the commits live on
+ * @param {string} tipSha   commit the chain ends at (parent of the new commit)
+ * @param {Array<{ sha: string, branch: string, sources?: Array<{name:string, sha:string}> }>} recorded
+ * @returns {{ commits: typeof recorded, base: string }|null}  `base` is the parent of the oldest commit
+ */
+export function squashableChain(cwd, branch, tipSha, recorded) {
+  if (git(['config', '--type=bool', '--get', 'commit.gpgsign'], cwd, 'false') === 'true') return null;
+
+  const unpushed = new Set(
+    git(['rev-list', `--max-count=${MAX_SQUASH_CHAIN}`, tipSha, '--not', '--remotes'], cwd, '')
+      .split('\n')
+      .filter(Boolean)
+  );
+
+  const commits = [];
+  let base = null;
+  let sha = tipSha;
+  while (commits.length < MAX_SQUASH_CHAIN) {
+    const entry = recorded.find((e) => e.sha === sha && e.branch === branch);
+    if (!entry || !unpushed.has(sha)) break;
+    const parents = git(['rev-list', '--parents', '-n', '1', sha], cwd, '').split(' ').slice(1);
+    if (parents.length !== 1) break;
+    commits.push(entry);
+    base = parents[0];
+    sha = parents[0];
+  }
+  if (commits.length === 0) return null;
+
+  const oldest = commits[commits.length - 1].sha;
+  // On failure the fallback is not a ref name, so the check below rejects the chain.
+  const holders = git(
+    ['for-each-ref', '--contains', oldest, '--format=%(refname)', 'refs/heads', 'refs/tags'],
+    cwd,
+    '\0'
+  )
+    .split('\n')
+    .filter(Boolean);
+  if (holders.length !== 1 || holders[0] !== `refs/heads/${branch}`) return null;
+
+  return { commits, base };
+}
+
+/**
+ * Replaces `newSha` (the tip of `branch`) with one commit that has the same
+ * tree but `base` as parent, so every commit between `base` and `newSha`
+ * disappears from the branch's history. Only the branch ref moves: index and
+ * working tree are untouched, and the tree is identical, so no file content
+ * can change. The ref update is compare-and-swap on `newSha` — if anything
+ * moved the branch in the meantime nothing happens. Returns the new commit's
+ * sha, or null when squashing would be pointless (same tree as `base`) or the
+ * ref moved. The replaced commits stay in the reflog.
+ * @param {string} cwd
+ * @param {{ branch: string, base: string, newSha: string, message: string }} params
+ * @returns {string|null}
+ */
+export function squashOnto(cwd, { branch, base, newSha, message }) {
+  const tree = gitOrThrow(['rev-parse', `${newSha}^{tree}`], cwd);
+  if (tree === gitOrThrow(['rev-parse', `${base}^{tree}`], cwd)) return null;
+
+  const squashed = gitOrThrow(['commit-tree', tree, '-p', base, '-m', message], cwd);
+  const res = spawnSync(
+    'git',
+    ['update-ref', '-m', 'updeps: squash', `refs/heads/${branch}`, squashed, newSha],
+    { cwd, encoding: 'utf8' }
+  );
+  return res.status === 0 ? squashed : null;
+}
+
 /**
  * Content hash (git blob sha) of a working-tree file, or null if it can't be
  * read (e.g. deleted by the command).

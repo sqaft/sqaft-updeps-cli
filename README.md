@@ -86,7 +86,8 @@ kılmaz — sessizce yok sayılıp varsayılana düşmek yerine `updeps doctor`
     "waitTimeoutSec": 0,                  // 0 = kilit için sınırsız bekle
     "dirtyPolicy": "selective",           // selective | skip
     "push": false,
-    "coalesce": true                      // bkz. "Eşzamanlılık"
+    "coalesce": true,                     // bkz. "Eşzamanlılık"
+    "squash": true                        // bkz. "Önceki update commit'lerini birleştirme"
   },
   "repos": [
     {
@@ -100,6 +101,7 @@ kılmaz — sessizce yok sayılıp varsayılana düşmek yerine `updeps doctor`
           "commands": ["yarn upgrade {pkgs}"],
           "commitMessage": "deps: {bumps}",
           "push": false,
+          "squash": true,
           "commandTimeout": 300,
           "dirtyPolicy": "selective"
         }
@@ -156,6 +158,37 @@ SHA tutarsızlığı oluşmaz — lockfile parse etmeye gerek kalmadan.
 Komut hata verirse, yalnızca **komut öncesi temiz olan** ve komutun değiştirdiği
 takipli dosyalar geri alınır. `git reset --hard` / `git clean -fd` hiçbir koşulda
 çalıştırılmaz.
+
+### Önceki update commit'lerini birleştirme (`squash`)
+
+Hedef repoda updeps'in daha önce attığı ve **henüz push edilmemiş** commit'ler
+varsa (aynı hedef birkaç kez güncellendiyse), yeni update commit'i onlarla tek
+commit'te birleştirilir; her update için ayrı commit birikmez. Commit mesajı
+`{bumps}` ile birleşen tüm kaynakları listeler (bir kaynak birden çok kez
+güncellendiyse en son SHA'sıyla).
+
+Hata payını sıfıra indirmek için kurallar katıdır:
+
+- Yalnızca updeps'in kendi kaydettiği commit'ler (`state.json` → `autoCommits`,
+  tam SHA eşleşmesi) birleştirilir. Mesajı benzeyen ya da senin attığın hiçbir
+  commit birleştirilmez; bir updeps commit'ini `--amend`/rebase edersen artık
+  tanınmaz.
+- Zincir yeni commit'in hemen altından başlar ve ilk updeps'e ait olmayan
+  commit'te biter: araya senin bir commit'in girdiyse onun altındakilere
+  dokunulmaz.
+- Push edilmiş (herhangi bir remote-tracking ref'ten erişilebilen) commit
+  birleştirilmez; başka bir yerel branch ya da tag aynı commit'i içeriyorsa,
+  merge commit varsa, HEAD detached ise ya da `commit.gpgsign` açıksa
+  birleştirme yapılmaz ve update ayrı commit olarak kalır.
+- Birleştirme yalnızca branch referansını taşır; index'e ve working tree'ye
+  dokunulmaz, sonuç commit'in ağacı (tree) update commit'iyle birebir aynıdır —
+  dosya içeriği değişemez. Ref güncellemesi karşılaştır-ve-değiştir (CAS)
+  yapılır: araya başka bir commit girerse hiçbir şey olmaz. Birleştirilen
+  commit'ler reflog'da kalır ve `updeps show` ile görünür.
+- Herhangi bir hata/belirsizlikte update ayrı commit olarak kalır; birleştirme
+  hiçbir zaman çalışmayı başarısız yapmaz.
+
+Kapatmak için `"squash": false` (`defaults` veya hedef düzeyinde).
 
 ### `push: true` ve zincirleme
 
