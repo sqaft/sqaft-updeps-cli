@@ -16,7 +16,7 @@ KOMUTLAR
   remove <kaynak> [hedef]        İlişkiyi veya kaynağı sil
   run [kaynak] [--target X]      Manuel çalıştır (--dry-run)
   retry --failed | <hedef>      Açık hataları yeniden dene
-  push [--dry-run]               Commit'leri bağımlılık sırasıyla push et, daemon'u bekle
+  push [--dry-run] [--commit=MSG] Commit'leri bağımlılık sırasıyla push et, daemon'u bekle
   status [-w/--watch]            Şu an ne çalışıyor, açık hatalar, son çalışmalar
   history [--failed] [--repo X]  Tüm işlem geçmişi ([--since 2d] [-n N] [--json])
   show <grup|hedef>             Bir çalışmanın tam detayı (komutlar, çıktı, commit)
@@ -48,7 +48,7 @@ const COMMAND_OPTIONS = {
   },
   run: { target: { type: 'string' }, 'dry-run': { type: 'boolean' } },
   retry: { failed: { type: 'boolean' } },
-  push: { 'dry-run': { type: 'boolean' } },
+  push: { 'dry-run': { type: 'boolean' }, commit: { type: 'string' } },
   status: { watch: { type: 'boolean', short: 'w' } },
   history: {
     failed: { type: 'boolean' },

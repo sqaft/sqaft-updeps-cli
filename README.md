@@ -211,6 +211,7 @@ zincirinde B, A'nın güncellemesini almadan push edilirse C iki kez güncelleni
 cd ~/workspace/acme       # repo içinde ya da repoları barındıran bir dizinde
 updeps push --dry-run     # kapsam + tahmini turlar, hiçbir şey push etmez
 updeps push
+updeps push --commit="wip: toplu değişiklik"   # önce değişikliği olan repoları commit'le
 ```
 
 Kapsam: bulunduğun dizin bir repoysa (alt dizini de olur) yalnızca o repo;
@@ -231,6 +232,18 @@ Her tur:
    görünür; B artık hem kendi commit'iyle hem A'dan gelen güncellemeyle tek
    seferde push edilir. Push edilecek commit kalmayana kadar tekrarlanır.
 
+`--commit="mesaj"`: daemon boşa çıktıktan sonra, ilk push'tan önce, kapsamdaki
+push edilebilir (upstream'i olan, detached HEAD'de ve merge/rebase ortasında
+olmayan) her repoda bekleyen tüm değişiklikler (takipli, silinen ve takipsiz
+dosyalar; `.gitignore` geçerli) `git add -A` + `git commit -m "mesaj"` ile tek
+commit'e alınır. Repo'nun kendi hook'ları çalışır; herhangi bir repoda commit
+atılamazsa (hook hatası, çözülmemiş çakışma vb.) hiçbir şey push edilmeden
+durulur. Commit'ler push sırasına normal commit gibi katılır, yani yeni bir
+kaynak commit'i bağımlı repoları aynı turlarda günceller. `--dry-run` ile
+birlikte hangi repolarda kaç dosyanın commit'leneceğini gösterir. Bu
+commit'ler senin commit'lerindir: updeps'in `squash` birleştirmesine hiçbir
+zaman girmezler.
+
 Başlamadan önce daemon çalışıyor olmalıdır (`updeps start`). Bir push başarısız
 olursa, daemon bir hedefi güncelleyemezse (`failed`) ya da daemon push'u
 işlemezse komut durur ve `1` ile çıkar; sorunu giderip tekrar çalıştırınca
@@ -250,7 +263,7 @@ ilerideyse push reddedilir ve komut durur.
 | `updeps remove <kaynak> [hedef]` | İlişkiyi veya kaynağı siler |
 | `updeps run [kaynak] [--target X] [--dry-run]` | Manuel çalıştırma (tetikleyici/branch filtrelerini atlar) |
 | `updeps retry --failed` \| `updeps retry <hedef>` | Açık hataları yeniden dener |
-| `updeps push [--dry-run]` | Bulunduğun dizindeki (repo içindeyse o repo, değilse altındaki tüm repolar) push edilmemiş commit'leri bağımlılık sırasıyla push eder ve her turda daemon'un güncellemelerini bekler. Bkz. "Zincirleme push" |
+| `updeps push [--dry-run] [--commit=MSG]` | Bulunduğun dizindeki (repo içindeyse o repo, değilse altındaki tüm repolar) push edilmemiş commit'leri bağımlılık sırasıyla push eder ve her turda daemon'un güncellemelerini bekler. Bkz. "Zincirleme push" |
 | `updeps status [-w/--watch]` | Şu an ne çalışıyor + kuyruktaki hedefler, **açık hatalar**, son çalışmalar. `--watch` = saniyede bir yenilenen canlı görünüm |
 | `updeps history [--failed] [--repo X] [--since 2d] [-n N] [--json]` | Tüm işlem geçmişi (kalıcı JSONL günlüğünden) |
 | `updeps show <grup-id \| hedef \| kaynak>` | Bir çalışmanın tam detayı: komutlar, çıktı, commit SHA, hata çıktısı |

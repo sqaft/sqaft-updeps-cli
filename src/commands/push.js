@@ -2,7 +2,7 @@ import path from 'node:path';
 import { styleText } from 'node:util';
 import { loadConfig } from '../config.js';
 import { runningDaemonPid, daemonCodeStale } from '../daemon.js';
-import { buildGraph, discoverRepos, inspectAll, planRounds, runCascade } from '../cascade.js';
+import { buildGraph, changedFileCount, discoverRepos, inspectAll, planRounds, runCascade } from '../cascade.js';
 import { tildify } from '../paths.js';
 
 function fail(message) {
@@ -19,7 +19,11 @@ function printPlan(infos, graph) {
       console.log(`  ${styleText('dim', '–')} ${i.label}  ${styleText('yellow', `atlandı: ${i.skip}`)}  ${where}`);
     } else if (i.ahead > 0) {
       const tag = i.watched ? '' : styleText('dim', ' · daemon izlemiyor');
-      console.log(`  ${styleText('cyan', '↑')} ${i.label}  ${i.ahead} commit → ${i.remote}/${i.remoteBranch}${tag}  ${where}`);
+      const fresh = i.pendingFiles ? styleText('yellow', ` + ${i.pendingFiles} dosya commit'lenecek`) : '';
+      const commits = i.ahead - (i.pendingFiles ? 1 : 0);
+      console.log(
+        `  ${styleText('cyan', '↑')} ${i.label}  ${commits > 0 ? `${commits} commit` : 'yeni commit'}${fresh} → ${i.remote}/${i.remoteBranch}${tag}  ${where}`
+      );
     } else {
       console.log(`  ${styleText('dim', '·')} ${styleText('dim', `${i.label}  güncel  ${where}`)}`);
     }
@@ -46,9 +50,14 @@ function printPlan(infos, graph) {
 /**
  * `updeps push`: pushes the unpushed commits of the repos under the current
  * directory in dependency order, waiting for the daemon between rounds.
- * @param {{ 'dry-run'?: boolean }} opts
+ * With `--commit`, every pushable repo with pending changes is committed with
+ * that message first.
+ * @param {{ 'dry-run'?: boolean, commit?: string }} opts
  */
 export async function cmdPush(opts = {}) {
+  const commitMessage = opts.commit;
+  if (commitMessage !== undefined && commitMessage.trim() === '') fail('--commit için boş olmayan bir commit mesajı ver.');
+
   const config = loadConfig();
   const repos = discoverRepos(process.cwd());
   if (repos.length === 0) fail('Bu dizinde ve altında git reposu bulunamadı.');
@@ -56,7 +65,16 @@ export async function cmdPush(opts = {}) {
   const graph = buildGraph(config);
 
   if (opts['dry-run']) {
-    printPlan(inspectAll(repos, graph), graph);
+    const infos = inspectAll(repos, graph);
+    if (commitMessage !== undefined) {
+      // forecast only: a repo with pending changes will have one more commit to push
+      for (const i of infos) {
+        if (i.skip) continue;
+        i.pendingFiles = changedFileCount(i.path);
+        if (i.pendingFiles > 0) i.ahead += 1;
+      }
+    }
+    printPlan(infos, graph);
     return;
   }
 
@@ -91,7 +109,8 @@ export async function cmdPush(opts = {}) {
       repos,
       isDaemonAlive: () => runningDaemonPid() !== null,
       log,
-      progress
+      progress,
+      commitMessage
     });
   } catch (err) {
     clearLine();
@@ -112,9 +131,10 @@ export async function cmdPush(opts = {}) {
   }
 
   const pushes = result.rounds.reduce((n, r) => n + r.pushed.length, 0);
+  const commits = result.committed.length > 0 ? `${result.committed.length} repo commit'lendi, ` : '';
   console.log(
     pushes === 0
       ? 'Push edilecek commit yok.'
-      : styleText('green', `✓ Tamam: ${result.rounds.length} tur, ${pushes} push.`)
+      : styleText('green', `✓ Tamam: ${commits}${result.rounds.length} tur, ${pushes} push.`)
   );
 }

@@ -85,6 +85,29 @@ export function selectiveCommit(cwd, paths, message) {
   return git(['rev-parse', '--short', 'HEAD'], cwd, '');
 }
 
+/**
+ * True when the status snapshot contains an unresolved merge conflict entry.
+ * @param {Map<string,string>} snapshot  from `statusSnapshot`
+ * @returns {boolean}
+ */
+export function hasUnmerged(snapshot) {
+  return [...snapshot.values()].some((c) => c.includes('U') || c === 'AA' || c === 'DD');
+}
+
+/**
+ * Stages every change (tracked, deleted and untracked, honoring .gitignore)
+ * and commits it with the repo's hooks enabled. For commits the user asked
+ * for explicitly — updeps' own automatic commits never use `add -A`.
+ * @param {string} cwd
+ * @param {string} message
+ * @returns {string} the new commit's short sha
+ */
+export function commitAll(cwd, message) {
+  gitOrThrow(['add', '-A'], cwd);
+  gitOrThrow(['commit', '-m', message], cwd);
+  return git(['rev-parse', '--short', 'HEAD'], cwd, '');
+}
+
 const MAX_SQUASH_CHAIN = 50;
 
 /**

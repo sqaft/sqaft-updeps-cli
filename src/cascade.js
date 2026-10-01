@@ -2,7 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { git, gitOrThrow } from './exec.js';
-import { checkPreconditions, upstreamStatus, remoteTip } from './gitops.js';
+import {
+  checkPreconditions,
+  upstreamStatus,
+  remoteTip,
+  statusSnapshot,
+  hasUnmerged,
+  commitAll
+} from './gitops.js';
+import { acquireLock } from './lock.js';
 import { watchedBranches, watchesPush } from './watcher.js';
 import { loadState } from './state.js';
 import { readEvents } from './journal.js';
@@ -64,13 +72,16 @@ export function discoverRepos(cwd) {
  * @returns {{
  *   parents: Map<string, Set<string>>,
  *   children: Map<string, Set<string>>,
- *   sources: Map<string, object>
+ *   sources: Map<string, object>,
+ *   targetPaths: Map<string, string>
  * }}
  */
 export function buildGraph(config) {
   const parents = new Map();
   const children = new Map();
   const sources = new Map();
+  /** real path -> the path as configured (what the daemon's per-target lock is keyed by) */
+  const targetPaths = new Map();
   const link = (map, key, value) => {
     if (!map.has(key)) map.set(key, new Set());
     map.get(key).add(value);
@@ -80,11 +91,12 @@ export function buildGraph(config) {
     sources.set(sourcePath, repo);
     for (const pkg of repo.packages) {
       const targetPath = canon(pkg.path);
+      targetPaths.set(targetPath, pkg.path);
       link(parents, targetPath, sourcePath);
       link(children, sourcePath, targetPath);
     }
   }
-  return { parents, children, sources };
+  return { parents, children, sources, targetPaths };
 }
 
 /**
@@ -317,6 +329,49 @@ function collectResults(since, sourceNames) {
 }
 
 /**
+ * Number of changed paths (tracked, deleted, untracked) in a repo.
+ * @param {string} repoPath
+ * @returns {number}
+ */
+export function changedFileCount(repoPath) {
+  return statusSnapshot(repoPath).size;
+}
+
+/**
+ * Commits all changes of every pushable repo in scope with `message`. Runs
+ * under the repo's updeps lock (the daemon's per-target lock), so it never
+ * overlaps an update job. Aborts with an error at the first repo that cannot
+ * be committed (conflicts, failing hook, ...) — before anything is pushed.
+ * @param {string[]} repos
+ * @param {ReturnType<typeof buildGraph>} graph
+ * @param {string} message
+ * @param {(line: string) => void} log
+ * @returns {Promise<Array<{ label: string, path: string, files: number, sha: string }>>}
+ */
+async function commitChanges(repos, graph, message, log) {
+  const committed = [];
+  for (const info of inspectAll(repos, graph)) {
+    if (info.skip || changedFileCount(info.path) === 0) continue;
+
+    const lock = await acquireLock(graph.targetPaths.get(info.path) ?? info.path, { waitTimeoutSec: 60 });
+    try {
+      const snapshot = statusSnapshot(info.path);
+      if (snapshot.size === 0) continue; // changed while waiting for the lock
+      if (hasUnmerged(snapshot)) throw new Error('çözülmemiş merge çakışması var');
+      const sha = commitAll(info.path, message);
+      committed.push({ label: info.label, path: info.path, files: snapshot.size, sha });
+      log(`Commit: ${info.label} (${snapshot.size} dosya) ${sha}`);
+    } catch (err) {
+      const done = committed.length > 0 ? ` (önce commit'lenenler: ${committed.map((c) => c.label).join(', ')})` : '';
+      throw new Error(`[${info.label}] commit atılamadı, hiçbir şey push edilmedi${done}: ${redact(err.message)}`);
+    } finally {
+      lock.release();
+    }
+  }
+  return committed;
+}
+
+/**
  * Pushes unpushed commits in dependency order and waits for the daemon after
  * each round, until nothing is left to push.
  *
@@ -333,7 +388,8 @@ function collectResults(since, sourceNames) {
  * @param {(line: string) => void} [params.log]
  * @param {(text: string) => void} [params.progress]  live status while waiting
  * @param {number} [params.maxRounds=50]
- * @returns {Promise<{ rounds: Array<{ pushed: object[], results: object[] }>, failed: object[], skipped: RepoInfo[] }>}
+ * @param {string} [params.commitMessage]  commit every pushable repo's pending changes with this message before the first push
+ * @returns {Promise<{ rounds: Array<{ pushed: object[], results: object[] }>, failed: object[], skipped: RepoInfo[], committed: object[] }>}
  */
 export async function runCascade({
   config,
@@ -342,7 +398,8 @@ export async function runCascade({
   pollMs = 1000,
   log = () => {},
   progress = () => {},
-  maxRounds = 50
+  maxRounds = 50,
+  commitMessage
 }) {
   const graph = buildGraph(config);
   const watchList = buildWatchList(config);
@@ -356,9 +413,11 @@ export async function runCascade({
   // Let any update the daemon is already working on land before the first push.
   await wait(snapshotTips(watchList));
 
+  const committed = commitMessage ? await commitChanges(repos, graph, commitMessage, log) : [];
+
   for (let n = 1; n <= maxRounds; n++) {
     const ahead = inspectAll(repos, graph).filter((i) => !i.skip && i.ahead > 0);
-    if (ahead.length === 0) return { rounds, failed: [], skipped };
+    if (ahead.length === 0) return { rounds, failed: [], skipped, committed };
 
     const blocking = new Set(ahead.filter((i) => i.watched).map((i) => i.path));
     const frontier = pickPushable(
@@ -400,7 +459,7 @@ export async function runCascade({
     for (const r of failed) log(`  ✗ ${r.target} ← ${r.source}: ${r.message}`);
     const count = (s) => results.filter((x) => x.status === s).length;
     log(`  daemon: ${count('committed')} commit, ${count('unchanged')} güncel, ${failed.length} hata, ${count('skipped')} atlandı`);
-    if (failed.length > 0) return { rounds, failed, skipped };
+    if (failed.length > 0) return { rounds, failed, skipped, committed };
   }
   throw new Error(`${maxRounds} turda tamamlanamadı, durduruldu.`);
 }
