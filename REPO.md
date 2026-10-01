@@ -1,6 +1,7 @@
 # @sqaft/updeps-cli
 
-**Durum:** Geliştirme aşamasında
+**Durum:** Geliştirme aşamasında  
+**Tür:** Bağımsız kütüphane / ürün
 
 Bir paket push edildiğinde onu bağımlılık olarak kullanan repoları otomatik güncelleyen, dil ve paket yöneticisinden bağımsız macOS CLI'ı ve arka plan servisi (launchd daemon). Ayrıntılar: `README.md`, `updeps --help`.
 
