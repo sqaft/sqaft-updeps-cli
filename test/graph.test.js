@@ -14,7 +14,7 @@ test('ters indeks hedefi listeleyen tüm kaynakları toplar', async () => {
   const idx = buildReverseIndex(cfg);
   const appPath = cfg.repos.find((r) => r.name === '@globex/sdk').packages[0].path;
   const names = idx.get(appPath).map((s) => s.name);
-  assert.deepEqual(names, ['@acme/api', '@globex/sdk', '@hooli/http-client']);
+  assert.deepEqual(names, ['@acme/api', '@globex/sdk', '@hooli/http-client', '@initech/sdk']);
 });
 
 test('umbrella-machine dört paket türetir', async () => {

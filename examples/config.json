@@ -88,10 +88,6 @@
       "name": "@hooli/http-client",
       "packages": [
         {
-          "path": "~/workspace/globex/globex-sdk",
-          "name": "@globex/sdk"
-        },
-        {
           "path": "~/workspace/acme/acme-app",
           "name": "acme-app"
         },
@@ -126,6 +122,43 @@
         {
           "path": "~/workspace/acme/acme-scheduler",
           "name": "acme-scheduler"
+        }
+      ]
+    },
+    {
+      "path": "~/workspace/initech/initech-sdk",
+      "name": "@initech/sdk",
+      "packages": [
+        {
+          "path": "~/workspace/acme/acme-app",
+          "name": "acme-app"
+        },
+        {
+          "path": "~/workspace/acme/acme-functions",
+          "name": "acme-functions"
+        },
+        {
+          "path": "~/workspace/acme/acme-runner",
+          "name": "acme-runner"
+        },
+        {
+          "path": "~/workspace/acme/acme-scheduler",
+          "name": "acme-scheduler"
+        },
+        {
+          "path": "~/workspace/initech/initech-api",
+          "name": "initech-api"
+        },
+        {
+          "path": "~/workspace/globex/globex-sdk",
+          "name": "@globex/sdk"
+        },
+        {
+          "path": "~/workspace/acme/acme-web",
+          "name": "acme-web",
+          "commands": [
+            "composer update initech/sdk"
+          ]
         }
       ]
     },
