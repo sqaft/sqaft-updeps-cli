@@ -1,8 +1,12 @@
 {
   "notifications": true,
   "defaults": {
-    "triggers": ["push"],
-    "commands": ["npm update {pkgs} --no-audit --no-fund"],
+    "triggers": [
+      "push"
+    ],
+    "commands": [
+      "npm update {pkgs} --no-audit --no-fund"
+    ],
     "commitMessage": "package updated {bumps}",
     "commandTimeout": 300,
     "debounceMs": 3000,
@@ -14,169 +18,479 @@
       "path": "~/workspace/acme/acme-api",
       "name": "@acme/api",
       "packages": [
-        { "path": "~/workspace/acme/acme-app", "name": "acme-app" },
-        { "path": "~/workspace/acme/acme-functions", "name": "acme-functions" },
-        { "path": "~/workspace/acme/acme-runner", "name": "acme-runner" },
-        { "path": "~/workspace/acme/acme-scheduler", "name": "acme-scheduler" }
+        {
+          "path": "~/workspace/acme/acme-app",
+          "name": "acme-app"
+        },
+        {
+          "path": "~/workspace/acme/acme-functions",
+          "name": "acme-functions"
+        },
+        {
+          "path": "~/workspace/acme/acme-runner",
+          "name": "acme-runner"
+        },
+        {
+          "path": "~/workspace/acme/acme-scheduler",
+          "name": "acme-scheduler"
+        }
       ]
     },
     {
       "path": "~/workspace/acme/acme-app",
       "name": "@acme/app",
       "packages": [
-        { "path": "~/workspace/acme/acme-functions", "name": "acme-functions" },
-        { "path": "~/workspace/acme/acme-runner", "name": "acme-runner" },
-        { "path": "~/workspace/acme/acme-scheduler", "name": "acme-scheduler" }
+        {
+          "path": "~/workspace/acme/acme-functions",
+          "name": "acme-functions"
+        },
+        {
+          "path": "~/workspace/acme/acme-runner",
+          "name": "acme-runner"
+        },
+        {
+          "path": "~/workspace/acme/acme-scheduler",
+          "name": "acme-scheduler"
+        }
       ]
     },
     {
       "path": "~/workspace/globex/globex-sdk",
       "name": "@globex/sdk",
       "packages": [
-        { "path": "~/workspace/acme/acme-app", "name": "acme-app" },
-        { "path": "~/workspace/acme/acme-functions", "name": "acme-functions" },
-        { "path": "~/workspace/acme/acme-runner", "name": "acme-runner" },
-        { "path": "~/workspace/acme/acme-scheduler", "name": "acme-scheduler" },
-        { "path": "~/workspace/acme/acme-web", "name": "acme-web", "commands": ["composer update globex/sdk"] }
+        {
+          "path": "~/workspace/acme/acme-app",
+          "name": "acme-app"
+        },
+        {
+          "path": "~/workspace/acme/acme-functions",
+          "name": "acme-functions"
+        },
+        {
+          "path": "~/workspace/acme/acme-runner",
+          "name": "acme-runner"
+        },
+        {
+          "path": "~/workspace/acme/acme-scheduler",
+          "name": "acme-scheduler"
+        },
+        {
+          "path": "~/workspace/acme/acme-web",
+          "name": "acme-web",
+          "commands": [
+            "composer update globex/sdk"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-http-client",
       "name": "@hooli/http-client",
       "packages": [
-        { "path": "~/workspace/globex/globex-sdk", "name": "globex-sdk" },
-        { "path": "~/workspace/acme/acme-app", "name": "acme-app" },
-        { "path": "~/workspace/acme/acme-functions", "name": "acme-functions" },
-        { "path": "~/workspace/acme/acme-runner", "name": "acme-runner" },
-        { "path": "~/workspace/acme/acme-scheduler", "name": "acme-scheduler" }
+        {
+          "path": "~/workspace/globex/globex-sdk",
+          "name": "@globex/sdk"
+        },
+        {
+          "path": "~/workspace/acme/acme-app",
+          "name": "acme-app"
+        },
+        {
+          "path": "~/workspace/acme/acme-functions",
+          "name": "acme-functions"
+        },
+        {
+          "path": "~/workspace/acme/acme-runner",
+          "name": "acme-runner"
+        },
+        {
+          "path": "~/workspace/acme/acme-scheduler",
+          "name": "acme-scheduler"
+        }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-pipeline-runner",
       "name": "@hooli/pipeline-runner",
       "packages": [
-        { "path": "~/workspace/acme/acme-runner", "name": "acme-runner" }
+        {
+          "path": "~/workspace/acme/acme-runner",
+          "name": "acme-runner"
+        }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-queue-runner",
       "name": "@hooli/queue-runner",
       "packages": [
-        { "path": "~/workspace/acme/acme-scheduler", "name": "acme-scheduler" }
+        {
+          "path": "~/workspace/acme/acme-scheduler",
+          "name": "acme-scheduler"
+        }
       ]
     },
     {
       "path": "~/workspace/globex/globex-core",
       "name": "@globex/core",
       "packages": [
-        { "path": "~/workspace/globex/globex-emails", "name": "globex-emails" },
-        { "path": "~/workspace/globex/globex-captchas", "name": "globex-captchas" },
-        { "path": "~/workspace/globex/globex-numbers", "name": "globex-numbers" },
-        { "path": "~/workspace/globex/globex-api", "name": "globex-api" }
+        {
+          "path": "~/workspace/globex/globex-emails",
+          "name": "@globex/emails",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        },
+        {
+          "path": "~/workspace/globex/globex-captchas",
+          "name": "@globex/captchas",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        },
+        {
+          "path": "~/workspace/globex/globex-numbers",
+          "name": "@globex/numbers",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        },
+        {
+          "path": "~/workspace/globex/globex-api",
+          "name": "@globex/api",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/globex/globex-numbers",
       "name": "@globex/numbers",
       "packages": [
-        { "path": "~/workspace/globex/globex-api", "name": "globex-api" }
+        {
+          "path": "~/workspace/globex/globex-api",
+          "name": "@globex/api",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        },
+        {
+          "path": "~/workspace/globex/globex-console",
+          "name": "@globex/console",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/globex/globex-emails",
       "name": "@globex/emails",
       "packages": [
-        { "path": "~/workspace/globex/globex-api", "name": "globex-api" }
+        {
+          "path": "~/workspace/globex/globex-api",
+          "name": "@globex/api",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        },
+        {
+          "path": "~/workspace/globex/globex-console",
+          "name": "@globex/console",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/globex/globex-captchas",
       "name": "@globex/captchas",
       "packages": [
-        { "path": "~/workspace/globex/globex-api", "name": "globex-api" }
+        {
+          "path": "~/workspace/globex/globex-api",
+          "name": "@globex/api",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        },
+        {
+          "path": "~/workspace/globex/globex-console",
+          "name": "@globex/console",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/umbrella/umbrella-api",
       "name": "@umbrella/api",
       "packages": [
-        { "path": "~/workspace/umbrella/umbrella-accounts", "name": "umbrella-accounts", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-functions", "name": "umbrella-functions", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-scout", "name": "umbrella-scout", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-machine", "name": "umbrella-machine", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-gateway", "name": "umbrella-gateway", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-runner", "name": "umbrella-runner", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-scheduler", "name": "umbrella-scheduler", "commands": ["yarn upgrade {pkgs}"] }
+        {
+          "path": "~/workspace/umbrella/umbrella-accounts",
+          "name": "umbrella-accounts",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-functions",
+          "name": "umbrella-functions",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-scout",
+          "name": "umbrella-scout",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-machine",
+          "name": "umbrella-machine",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-gateway",
+          "name": "umbrella-gateway",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-runner",
+          "name": "umbrella-runner",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-scheduler",
+          "name": "umbrella-scheduler",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/umbrella/umbrella-mobile-client",
       "name": "@umbrella/mobile-client",
       "packages": [
-        { "path": "~/workspace/umbrella/umbrella-accounts", "name": "umbrella-accounts", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-functions", "name": "umbrella-functions", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-scout", "name": "umbrella-scout", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-machine", "name": "umbrella-machine", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-gateway", "name": "umbrella-gateway", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-runner", "name": "umbrella-runner", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-scheduler", "name": "umbrella-scheduler", "commands": ["yarn upgrade {pkgs}"] }
+        {
+          "path": "~/workspace/umbrella/umbrella-accounts",
+          "name": "umbrella-accounts",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-functions",
+          "name": "umbrella-functions",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-scout",
+          "name": "umbrella-scout",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-machine",
+          "name": "umbrella-machine",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-gateway",
+          "name": "umbrella-gateway",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-runner",
+          "name": "umbrella-runner",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-scheduler",
+          "name": "umbrella-scheduler",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/umbrella/umbrella-web-client",
       "name": "@umbrella/web-client",
       "packages": [
-        { "path": "~/workspace/umbrella/umbrella-accounts", "name": "umbrella-accounts", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-functions", "name": "umbrella-functions", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-scout", "name": "umbrella-scout", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-machine", "name": "umbrella-machine", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-gateway", "name": "umbrella-gateway", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-runner", "name": "umbrella-runner", "commands": ["yarn upgrade {pkgs}"] },
-        { "path": "~/workspace/umbrella/umbrella-scheduler", "name": "umbrella-scheduler", "commands": ["yarn upgrade {pkgs}"] }
+        {
+          "path": "~/workspace/umbrella/umbrella-accounts",
+          "name": "umbrella-accounts",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-functions",
+          "name": "umbrella-functions",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-scout",
+          "name": "umbrella-scout",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-machine",
+          "name": "umbrella-machine",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-gateway",
+          "name": "umbrella-gateway",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-runner",
+          "name": "umbrella-runner",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-scheduler",
+          "name": "umbrella-scheduler",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/umbrella/umbrella-realtime",
       "name": "@umbrella/realtime",
       "packages": [
-        { "path": "~/workspace/umbrella/umbrella-machine", "name": "umbrella-machine", "commands": ["yarn upgrade {pkgs}"] }
+        {
+          "path": "~/workspace/umbrella/umbrella-machine",
+          "name": "umbrella-machine",
+          "commands": [
+            "yarn upgrade {pkgs}"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-sdk",
       "name": "hooli/sdk",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] }
+        {
+          "path": "~/workspace/hooli/hooli-web",
+          "name": "hooli-web",
+          "commands": [
+            "composer update"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-notifications",
       "name": "hooli/notifications",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] },
-        { "path": "~/workspace/umbrella/umbrella-web", "name": "umbrella-web", "commands": ["composer update"] }
+        {
+          "path": "~/workspace/hooli/hooli-web",
+          "name": "hooli-web",
+          "commands": [
+            "composer update"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-web",
+          "name": "umbrella-web",
+          "commands": [
+            "composer update"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-subscriptions",
       "name": "hooli/subscriptions",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] }
+        {
+          "path": "~/workspace/hooli/hooli-web",
+          "name": "hooli-web",
+          "commands": [
+            "composer update"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-auth",
       "name": "hooli/auth",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] },
-        { "path": "~/workspace/umbrella/umbrella-web", "name": "umbrella-web", "commands": ["composer update"] }
+        {
+          "path": "~/workspace/hooli/hooli-web",
+          "name": "hooli-web",
+          "commands": [
+            "composer update"
+          ]
+        },
+        {
+          "path": "~/workspace/umbrella/umbrella-web",
+          "name": "umbrella-web",
+          "commands": [
+            "composer update"
+          ]
+        }
       ]
     },
     {
       "path": "~/workspace/hooli/hooli-billing",
       "name": "hooli/billing",
       "packages": [
-        { "path": "~/workspace/hooli/hooli-web", "name": "hooli-web", "commands": ["composer update"] }
+        {
+          "path": "~/workspace/hooli/hooli-web",
+          "name": "hooli-web",
+          "commands": [
+            "composer update"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "~/workspace/globex/globex-api",
+      "name": "@globex/api",
+      "packages": [
+        {
+          "path": "~/workspace/globex/globex-console",
+          "name": "@globex/console",
+          "commands": [
+            "npm install {pkgs} --no-audit --no-fund"
+          ]
+        }
       ]
     }
   ]
