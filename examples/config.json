@@ -163,6 +163,14 @@
       ]
     },
     {
+      "path": "~/workspace/initech/initech-api",
+      "name": "@initech/api"
+    },
+    {
+      "path": "~/workspace/initech/initech-web",
+      "name": "@initech/web"
+    },
+    {
       "path": "~/workspace/globex/globex-core",
       "name": "@globex/core",
       "packages": [
