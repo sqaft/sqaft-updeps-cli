@@ -21,36 +21,36 @@
         {
           "path": "~/workspace/acme/acme-app",
           "name": "acme-app"
-        },
-        {
-          "path": "~/workspace/acme/acme-functions",
-          "name": "acme-functions"
-        },
-        {
-          "path": "~/workspace/acme/acme-runner",
-          "name": "acme-runner"
-        },
-        {
-          "path": "~/workspace/acme/acme-scheduler",
-          "name": "acme-scheduler"
         }
       ]
     },
     {
-      "path": "~/workspace/acme/acme-app",
-      "name": "@acme/app",
+      "path": "~/workspace/acme/acme-functions",
+      "name": "@acme/functions",
       "packages": [
         {
-          "path": "~/workspace/acme/acme-functions",
-          "name": "acme-functions"
-        },
+          "path": "~/workspace/acme/acme-app",
+          "name": "acme-app"
+        }
+      ]
+    },
+    {
+      "path": "~/workspace/acme/acme-runner",
+      "name": "@acme/runner",
+      "packages": [
         {
-          "path": "~/workspace/acme/acme-runner",
-          "name": "acme-runner"
-        },
+          "path": "~/workspace/acme/acme-app",
+          "name": "acme-app"
+        }
+      ]
+    },
+    {
+      "path": "~/workspace/acme/acme-scheduler",
+      "name": "@acme/scheduler",
+      "packages": [
         {
-          "path": "~/workspace/acme/acme-scheduler",
-          "name": "acme-scheduler"
+          "path": "~/workspace/acme/acme-app",
+          "name": "acme-app"
         }
       ]
     },
@@ -61,18 +61,6 @@
         {
           "path": "~/workspace/acme/acme-app",
           "name": "acme-app"
-        },
-        {
-          "path": "~/workspace/acme/acme-functions",
-          "name": "acme-functions"
-        },
-        {
-          "path": "~/workspace/acme/acme-runner",
-          "name": "acme-runner"
-        },
-        {
-          "path": "~/workspace/acme/acme-scheduler",
-          "name": "acme-scheduler"
         },
         {
           "path": "~/workspace/acme/acme-web",
@@ -90,18 +78,6 @@
         {
           "path": "~/workspace/acme/acme-app",
           "name": "acme-app"
-        },
-        {
-          "path": "~/workspace/acme/acme-functions",
-          "name": "acme-functions"
-        },
-        {
-          "path": "~/workspace/acme/acme-runner",
-          "name": "acme-runner"
-        },
-        {
-          "path": "~/workspace/acme/acme-scheduler",
-          "name": "acme-scheduler"
         }
       ]
     },
@@ -112,6 +88,10 @@
         {
           "path": "~/workspace/acme/acme-runner",
           "name": "acme-runner"
+        },
+        {
+          "path": "~/workspace/acme/acme-app",
+          "name": "acme-app"
         }
       ]
     },
@@ -132,18 +112,6 @@
         {
           "path": "~/workspace/acme/acme-app",
           "name": "acme-app"
-        },
-        {
-          "path": "~/workspace/acme/acme-functions",
-          "name": "acme-functions"
-        },
-        {
-          "path": "~/workspace/acme/acme-runner",
-          "name": "acme-runner"
-        },
-        {
-          "path": "~/workspace/acme/acme-scheduler",
-          "name": "acme-scheduler"
         },
         {
           "path": "~/workspace/initech/initech-api",
@@ -167,8 +135,8 @@
       "name": "@initech/api"
     },
     {
-      "path": "~/workspace/initech/initech-web",
-      "name": "@initech/web"
+      "path": "~/workspace/initech/initech-app",
+      "name": "@initech/app"
     },
     {
       "path": "~/workspace/globex/globex-core",
