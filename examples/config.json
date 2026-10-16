@@ -67,6 +67,10 @@
           "name": "acme-web",
           "commands": [
             "composer update globex/sdk"
+          ],
+          "commitPaths": [
+            "composer.json",
+            "composer.lock"
           ]
         }
       ]
@@ -126,6 +130,10 @@
           "name": "acme-web",
           "commands": [
             "composer update initech/sdk"
+          ],
+          "commitPaths": [
+            "composer.json",
+            "composer.lock"
           ]
         }
       ]
@@ -237,22 +245,8 @@
       "name": "@umbrella/api",
       "packages": [
         {
-          "path": "~/workspace/umbrella/umbrella-accounts",
-          "name": "umbrella-accounts",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
           "path": "~/workspace/umbrella/umbrella-functions",
           "name": "umbrella-functions",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
-          "path": "~/workspace/umbrella/umbrella-scout",
-          "name": "umbrella-scout",
           "commands": [
             "yarn upgrade {pkgs}"
           ]
@@ -265,22 +259,8 @@
           ]
         },
         {
-          "path": "~/workspace/umbrella/umbrella-gateway",
-          "name": "umbrella-gateway",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
-          "path": "~/workspace/umbrella/umbrella-runner",
-          "name": "umbrella-runner",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
-          "path": "~/workspace/umbrella/umbrella-scheduler",
-          "name": "umbrella-scheduler",
+          "path": "~/workspace/umbrella/umbrella-worker",
+          "name": "umbrella-worker",
           "commands": [
             "yarn upgrade {pkgs}"
           ]
@@ -292,22 +272,8 @@
       "name": "@umbrella/mobile-client",
       "packages": [
         {
-          "path": "~/workspace/umbrella/umbrella-accounts",
-          "name": "umbrella-accounts",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
           "path": "~/workspace/umbrella/umbrella-functions",
           "name": "umbrella-functions",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
-          "path": "~/workspace/umbrella/umbrella-scout",
-          "name": "umbrella-scout",
           "commands": [
             "yarn upgrade {pkgs}"
           ]
@@ -320,22 +286,8 @@
           ]
         },
         {
-          "path": "~/workspace/umbrella/umbrella-gateway",
-          "name": "umbrella-gateway",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
-          "path": "~/workspace/umbrella/umbrella-runner",
-          "name": "umbrella-runner",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
-          "path": "~/workspace/umbrella/umbrella-scheduler",
-          "name": "umbrella-scheduler",
+          "path": "~/workspace/umbrella/umbrella-worker",
+          "name": "umbrella-worker",
           "commands": [
             "yarn upgrade {pkgs}"
           ]
@@ -347,22 +299,8 @@
       "name": "@umbrella/web-client",
       "packages": [
         {
-          "path": "~/workspace/umbrella/umbrella-accounts",
-          "name": "umbrella-accounts",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
           "path": "~/workspace/umbrella/umbrella-functions",
           "name": "umbrella-functions",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
-          "path": "~/workspace/umbrella/umbrella-scout",
-          "name": "umbrella-scout",
           "commands": [
             "yarn upgrade {pkgs}"
           ]
@@ -375,22 +313,8 @@
           ]
         },
         {
-          "path": "~/workspace/umbrella/umbrella-gateway",
-          "name": "umbrella-gateway",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
-          "path": "~/workspace/umbrella/umbrella-runner",
-          "name": "umbrella-runner",
-          "commands": [
-            "yarn upgrade {pkgs}"
-          ]
-        },
-        {
-          "path": "~/workspace/umbrella/umbrella-scheduler",
-          "name": "umbrella-scheduler",
+          "path": "~/workspace/umbrella/umbrella-worker",
+          "name": "umbrella-worker",
           "commands": [
             "yarn upgrade {pkgs}"
           ]
@@ -411,25 +335,12 @@
       ]
     },
     {
-      "path": "~/workspace/hooli/hooli-sdk",
-      "name": "hooli/sdk",
-      "packages": [
-        {
-          "path": "~/workspace/hooli/hooli-web",
-          "name": "hooli-web",
-          "commands": [
-            "composer update"
-          ]
-        }
-      ]
-    },
-    {
       "path": "~/workspace/hooli/hooli-notifications",
       "name": "hooli/notifications",
       "packages": [
         {
-          "path": "~/workspace/hooli/hooli-web",
-          "name": "hooli-web",
+          "path": "~/workspace/acme/acme-web",
+          "name": "acme-web",
           "commands": [
             "composer update"
           ]
@@ -437,19 +348,6 @@
         {
           "path": "~/workspace/umbrella/umbrella-web",
           "name": "umbrella-web",
-          "commands": [
-            "composer update"
-          ]
-        }
-      ]
-    },
-    {
-      "path": "~/workspace/hooli/hooli-subscriptions",
-      "name": "hooli/subscriptions",
-      "packages": [
-        {
-          "path": "~/workspace/hooli/hooli-web",
-          "name": "hooli-web",
           "commands": [
             "composer update"
           ]
@@ -461,8 +359,8 @@
       "name": "hooli/auth",
       "packages": [
         {
-          "path": "~/workspace/hooli/hooli-web",
-          "name": "hooli-web",
+          "path": "~/workspace/acme/acme-web",
+          "name": "acme-web",
           "commands": [
             "composer update"
           ]
@@ -470,19 +368,6 @@
         {
           "path": "~/workspace/umbrella/umbrella-web",
           "name": "umbrella-web",
-          "commands": [
-            "composer update"
-          ]
-        }
-      ]
-    },
-    {
-      "path": "~/workspace/hooli/hooli-billing",
-      "name": "hooli/billing",
-      "packages": [
-        {
-          "path": "~/workspace/hooli/hooli-web",
-          "name": "hooli-web",
           "commands": [
             "composer update"
           ]

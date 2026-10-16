@@ -25,7 +25,7 @@ test('Authorization header ve _authToken', () => {
 });
 
 test('normal metin değişmez', () => {
-  const s = 'komut hatası (yarn upgrade @umbrella/api): çıkış kodu 1';
+  const s = 'komut hatası (yarn upgrade @acme/api): çıkış kodu 1';
   assert.equal(redact(s), s);
 });
 

@@ -4,6 +4,7 @@ import { logger } from './logger.js';
 import { runShell, git, gitOrThrow } from './exec.js';
 import { interpolateCommand, interpolateMessage } from './template.js';
 import { derivePackageNames } from './graph.js';
+import { createPathMatcher } from './glob.js';
 import {
   checkPreconditions,
   statusSnapshot,
@@ -34,6 +35,7 @@ import { sendNotification, refreshSwiftBar } from './notify.js';
  * @property {'committed'|'unchanged'|'failed'|'skipped'} status
  * @property {string} target
  * @property {string} message
+ * @property {string[]} [warnings]  e.g. changed files left out of the commit
  */
 
 let groupSeq = 0;
@@ -100,6 +102,7 @@ export function recordTargetResult({ target, trigger, group, status, rawMessage,
   const message = redact(rawMessage);
   if (extra.errorTail) extra.errorTail = redact(extra.errorTail);
   if (extra.commands) extra.commands = extra.commands.map(redact);
+  if (extra.warnings) extra.warnings = extra.warnings.map(redact);
 
   appendEvent({
     kind: 'target',
@@ -146,7 +149,21 @@ export function recordTargetResult({ target, trigger, group, status, rawMessage,
   });
 
   if (status === 'failed') logger.error(`[${label}] ${message}`);
-  return { status, target: label, message };
+  return { status, target: label, message, ...(extra.warnings?.length ? { warnings: extra.warnings } : {}) };
+}
+
+/**
+ * Warning for changed paths that are outside `commitPaths` and were left
+ * untouched (neither committed nor reverted). Also logged.
+ * @param {string} label
+ * @param {string[]} otherFiles
+ * @returns {string[]}  zero or one warning
+ */
+function otherFilesWarning(label, otherFiles) {
+  if (otherFiles.length === 0) return [];
+  const msg = `commitPaths dışında değişen dosyalara dokunulmadı: ${otherFiles.join(', ')}`;
+  logger.warn(`[${label}] ${msg}`);
+  return [msg];
 }
 
 const MAX_RECORDED_COMMITS = 50;
@@ -293,11 +310,17 @@ export async function runTarget({
       return emit('skipped', 'working tree kirli (dirtyPolicy: skip)');
     }
 
-    // Content hashes of files that were already dirty before the run. Their
-    // `git status` code won't change even if the command edits them further,
-    // so `diffSnapshots` alone would miss that update — hash them up front to
-    // catch it (see `dirtyTouched` below).
-    const dirtyTrackedBefore = [...before.keys()].filter((p) => before.get(p)[0] !== '?');
+    // Only files matching `commitPaths` (lockfiles, manifests) are treated as
+    // the update's output. Anything else that changes while the commands run
+    // may come from another process (an editor, a build watcher) and is
+    // neither committed nor reverted — only reported.
+    const isCommitPath = createPathMatcher(target.commitPaths);
+
+    // Content hashes of commitPaths files that were already dirty before the
+    // run. Their `git status` code won't change even if the command edits
+    // them further, so `diffSnapshots` alone would miss that update — hash
+    // them up front to catch it (see `dirtyTouched` below).
+    const dirtyTrackedBefore = [...before.keys()].filter((p) => before.get(p)[0] !== '?' && isCommitPath(p));
     const dirtyHashesBefore = dirtyTrackedBefore.length ? hashPaths(target.path, dirtyTrackedBefore) : null;
 
     const pkgList = derivePackageNames(config, target.path);
@@ -333,17 +356,23 @@ export async function runTarget({
             : `çıkış kodu ${result.code}`;
         const tail = (result.stderr || result.stdout || '').trim().split('\n').slice(-8).join('\n');
         logger.error(`[${label}] komut hatası: ${why}\n${tail}`);
-        safeRollback(target.path, before, statusSnapshot(target.path));
+        const { otherFiles } = safeRollback(target.path, before, statusSnapshot(target.path), isCommitPath);
+        const warnings = otherFilesWarning(label, otherFiles);
         return emit('failed', `komut hatası (${cmd}): ${why}`, {
           commands: ranCommands,
-          errorTail: tail
+          errorTail: tail,
+          ...(warnings.length ? { otherFiles, warnings } : {})
         });
       }
     }
 
     const after = statusSnapshot(target.path);
     const { tracked, untracked } = diffSnapshots(before, after);
-    const changed = [...tracked, ...untracked];
+    const changedAll = [...tracked, ...untracked];
+    const changed = changedAll.filter(isCommitPath);
+    const otherFiles = changedAll.filter((p) => !isCommitPath(p));
+    const warnings = otherFilesWarning(label, otherFiles);
+    const otherExtra = warnings.length ? { otherFiles, warnings } : {};
 
     let dirtyTouched = [];
     if (dirtyHashesBefore) {
@@ -355,22 +384,24 @@ export async function runTarget({
       if (dirtyTouched.length > 0) {
         const msg = `güncelleme önceden kirli dosyada kaldı, commit'lenmedi: ${dirtyTouched.join(', ')}`;
         logger.warn(`[${label}] ${msg}`);
-        return emit('skipped', msg, { commands: ranCommands, dirtyTouched });
+        return emit('skipped', msg, { commands: ranCommands, dirtyTouched, ...otherExtra });
       }
       logger.info(`[${label}] değişiklik yok (güncel)`);
-      return emit('unchanged', 'değişiklik yok', { commands: ranCommands });
+      return emit('unchanged', 'değişiklik yok', { commands: ranCommands, ...otherExtra });
     }
 
     let commitMsg = interpolateMessage(target.commitMessage, vars);
 
     if (dryRun) {
-      const stat = git(['diff', '--stat'], target.path, '');
-      logger.info(`[${label}] [dry-run] commit atılmayacak:\n${stat}`);
-      safeRollback(target.path, before, after);
+      const changedTracked = changed.filter((p) => !untracked.includes(p));
+      const stat = changedTracked.length ? git(['diff', '--stat', '--', ...changedTracked], target.path, '') : '';
+      logger.info(`[${label}] [dry-run] commit atılmayacak: ${changed.join(', ')}\n${stat}`);
+      safeRollback(target.path, before, after, isCommitPath);
       return emit('committed', `[dry-run] ${commitMsg}`, {
         commands: ranCommands,
         files: changed,
-        dryRun: true
+        dryRun: true,
+        ...otherExtra
       });
     }
 
@@ -411,7 +442,8 @@ export async function runTarget({
         return emit('failed', `commit atıldı ama push başarısız: ${err.message}`, {
           commands: ranCommands,
           commitSha: shortSha,
-          ...(replaced.length ? { squashed: replaced.map((s) => s.slice(0, 7)) } : {})
+          ...(replaced.length ? { squashed: replaced.map((s) => s.slice(0, 7)) } : {}),
+          ...otherExtra
         });
       }
     }
@@ -437,7 +469,8 @@ export async function runTarget({
       files: changed,
       pushed: Boolean(target.push),
       ...(replaced.length ? { squashed: replaced.map((s) => s.slice(0, 7)) } : {}),
-      ...(dirtyTouched.length ? { dirtyTouched } : {})
+      ...(dirtyTouched.length ? { dirtyTouched } : {}),
+      ...otherExtra
     });
   } finally {
     lock.release();

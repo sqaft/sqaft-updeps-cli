@@ -19,6 +19,7 @@ function execKey(target) {
     commitMessage: target.commitMessage,
     commandTimeout: target.commandTimeout,
     dirtyPolicy: target.dirtyPolicy,
+    commitPaths: target.commitPaths,
     push: target.push,
     squash: target.squash,
     staleLockSec: target.staleLockSec,

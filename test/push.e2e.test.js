@@ -26,7 +26,7 @@ function g(args, cwd) {
 
 /**
  * Creates `<name>` with a bare remote, one pushed commit, a bump script
- * (appends to deps.lock, so every run produces a commit) and one *unpushed*
+ * (appends to yarn.lock, so every run produces a commit) and one *unpushed*
  * local commit.
  */
 function makeRepo(prefix, name, bump) {
@@ -38,7 +38,7 @@ function makeRepo(prefix, name, bump) {
   g(['init', '-q', '-b', 'main'], work);
   g(['config', 'user.email', 't@t.t'], work);
   g(['config', 'user.name', 't'], work);
-  fs.writeFileSync(path.join(work, 'deps.lock'), '');
+  fs.writeFileSync(path.join(work, 'yarn.lock'), '');
   fs.writeFileSync(path.join(work, 'bump.sh'), bump);
   fs.writeFileSync(path.join(work, 'own.txt'), '1\n');
   g(['add', '-A'], work);
@@ -51,7 +51,7 @@ function makeRepo(prefix, name, bump) {
   return work;
 }
 
-const OK_BUMP = 'echo "$* $RANDOM$RANDOM" >> deps.lock\n';
+const OK_BUMP = 'echo "$* $RANDOM$RANDOM" >> yarn.lock\n';
 const FAIL_BUMP = 'echo boom >&2\nexit 1\n';
 
 function startDaemon(config) {
@@ -105,7 +105,7 @@ test('A→B→C: her repo bağımlılık sırasıyla push edilir, C yalnızca bi
     assert.equal(depsCommits(b), 1);
     assert.equal(depsCommits(c), 1);
     assert.equal(depsCommits(a), 0);
-    assert.match(fs.readFileSync(path.join(c, 'deps.lock'), 'utf8'), /pkg-b/);
+    assert.match(fs.readFileSync(path.join(c, 'yarn.lock'), 'utf8'), /pkg-b/);
   } finally {
     await watcher.stop();
   }

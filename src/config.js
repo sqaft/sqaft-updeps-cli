@@ -1,9 +1,36 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE, resolveHome } from './paths.js';
+import { compileGlob } from './glob.js';
 
 export const VALID_TRIGGERS = ['push', 'fetch', 'commit', 'merge'];
 export const VALID_DIRTY_POLICIES = ['selective', 'skip'];
+
+/**
+ * Files an update command is expected to produce: the lockfiles and manifests
+ * of common package managers, at any depth. Of the paths that change while
+ * the commands run, only those matching `commitPaths` are committed.
+ */
+export const DEFAULT_COMMIT_PATHS = Object.freeze([
+  'package.json',
+  'package-lock.json',
+  'npm-shrinkwrap.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  'bun.lock',
+  'bun.lockb',
+  'composer.json',
+  'composer.lock',
+  'Cargo.toml',
+  'Cargo.lock',
+  'go.mod',
+  'go.sum',
+  'Gemfile.lock',
+  'poetry.lock',
+  'uv.lock',
+  'Package.resolved',
+  'pubspec.lock'
+]);
 
 export const DEFAULT_VALUES = {
   triggers: ['push'],
@@ -15,6 +42,7 @@ export const DEFAULT_VALUES = {
   staleLockSec: 900,
   waitTimeoutSec: 0,
   dirtyPolicy: 'selective',
+  commitPaths: DEFAULT_COMMIT_PATHS,
   push: false,
   coalesce: true,
   squash: true
@@ -48,6 +76,23 @@ function assertPositiveNumber(value, fieldPath, { allowZero = false } = {}) {
   if (typeof value !== 'number' || Number.isNaN(value) || value < 0 || (!allowZero && value === 0)) {
     fail(fieldPath, allowZero ? '0 veya daha büyük bir sayı olmalı.' : "0'dan büyük bir sayı olmalı.");
   }
+}
+
+function assertGlobArray(value, fieldPath) {
+  if (value === undefined) return;
+  if (!Array.isArray(value) || value.length === 0) {
+    fail(fieldPath, 'en az bir glob deseni içeren bir metin dizisi (string[]) olmalı.');
+  }
+  value.forEach((pattern, i) => {
+    if (typeof pattern !== 'string' || pattern.trim() === '') {
+      fail(`${fieldPath}[${i}]`, 'boş olmayan bir glob deseni (string) olmalı.');
+    }
+    try {
+      compileGlob(pattern);
+    } catch (err) {
+      fail(`${fieldPath}[${i}]`, `geçersiz glob deseni "${pattern}" (${err.message}).`);
+    }
+  });
 }
 
 function assertBoolean(value, fieldPath) {
@@ -86,6 +131,7 @@ export function validateConfig(raw) {
     assertPositiveNumber(d.staleLockSec, 'defaults.staleLockSec');
     assertPositiveNumber(d.waitTimeoutSec, 'defaults.waitTimeoutSec', { allowZero: true });
     assertEnum(d.dirtyPolicy, 'defaults.dirtyPolicy', VALID_DIRTY_POLICIES);
+    assertGlobArray(d.commitPaths, 'defaults.commitPaths');
     assertBoolean(d.push, 'defaults.push');
     assertBoolean(d.coalesce, 'defaults.coalesce');
     assertBoolean(d.squash, 'defaults.squash');
@@ -123,6 +169,7 @@ export function validateConfig(raw) {
           assertPositiveNumber(pkg.staleLockSec, `${pp}.staleLockSec`);
           assertPositiveNumber(pkg.waitTimeoutSec, `${pp}.waitTimeoutSec`, { allowZero: true });
           assertEnum(pkg.dirtyPolicy, `${pp}.dirtyPolicy`, VALID_DIRTY_POLICIES);
+          assertGlobArray(pkg.commitPaths, `${pp}.commitPaths`);
           assertBoolean(pkg.push, `${pp}.push`);
           assertBoolean(pkg.coalesce, `${pp}.coalesce`);
           assertBoolean(pkg.squash, `${pp}.squash`);
@@ -143,6 +190,7 @@ const KNOWN_DEFAULTS_KEYS = new Set([
   'staleLockSec',
   'waitTimeoutSec',
   'dirtyPolicy',
+  'commitPaths',
   'push',
   'coalesce',
   'squash'
@@ -159,6 +207,7 @@ const KNOWN_PACKAGE_KEYS = new Set([
   'staleLockSec',
   'waitTimeoutSec',
   'dirtyPolicy',
+  'commitPaths',
   'push',
   'coalesce',
   'squash'
@@ -230,6 +279,7 @@ export function resolveConfig(raw) {
         staleLockSec: pkg.staleLockSec ?? defaults.staleLockSec,
         waitTimeoutSec: pkg.waitTimeoutSec ?? defaults.waitTimeoutSec,
         dirtyPolicy: pkg.dirtyPolicy ?? defaults.dirtyPolicy,
+        commitPaths: pkg.commitPaths ? [...pkg.commitPaths] : [...defaults.commitPaths],
         push: pkg.push !== undefined ? Boolean(pkg.push) : Boolean(defaults.push),
         coalesce: pkg.coalesce !== undefined ? Boolean(pkg.coalesce) : Boolean(defaults.coalesce),
         squash: pkg.squash !== undefined ? Boolean(pkg.squash) : Boolean(defaults.squash)

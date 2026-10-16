@@ -4,8 +4,8 @@ import { interpolateCommand, interpolateMessage } from '../src/template.js';
 import { shellQuote } from '../src/exec.js';
 
 const base = {
-  pkg: '@umbrella/api',
-  pkgList: ['@umbrella/api', '@umbrella/web-client'],
+  pkg: '@acme/api',
+  pkgList: ['@acme/api', '@acme/sdk'],
   sha: 'abcdef1234567890',
   sourcePath: '/src',
   sourceBranch: 'main',
@@ -15,7 +15,7 @@ const base = {
 
 test('komutta {pkgs} çoklu paket, scoped adlar', () => {
   const out = interpolateCommand('yarn upgrade {pkgs}', base);
-  assert.equal(out, 'yarn upgrade @umbrella/api @umbrella/web-client');
+  assert.equal(out, 'yarn upgrade @acme/api @acme/sdk');
 });
 
 test('boşluk içeren paket adı shell-quote edilir', () => {
@@ -25,13 +25,13 @@ test('boşluk içeren paket adı shell-quote edilir', () => {
 
 test('{sha} 7 haneye kısaltılır, {bumps} birleşik', () => {
   assert.equal(interpolateCommand('echo {sha}', base), 'echo abcdef1');
-  assert.equal(interpolateMessage('bump {bumps}', base), 'bump @umbrella/api@abcdef1');
+  assert.equal(interpolateMessage('bump {bumps}', base), 'bump @acme/api@abcdef1');
 });
 
 test('commit mesajında {pkgs} tırnak yok, virgüllü', () => {
   assert.equal(
     interpolateMessage('package updated {pkgs}', base),
-    'package updated @umbrella/api, @umbrella/web-client'
+    'package updated @acme/api, @acme/sdk'
   );
 });
 
@@ -39,17 +39,17 @@ test('{bumps} çoklu kaynak (coalesce edilmiş iş) listesi', () => {
   const multi = {
     ...base,
     sources: [
-      { name: '@umbrella/api', sha: 'aaaaaaa1234567' },
-      { name: '@umbrella/web-client', sha: 'bbbbbbb1234567' }
+      { name: '@acme/api', sha: 'aaaaaaa1234567' },
+      { name: '@acme/sdk', sha: 'bbbbbbb1234567' }
     ]
   };
   assert.equal(
     interpolateMessage('bump {bumps}', multi),
-    'bump @umbrella/api@aaaaaaa, @umbrella/web-client@bbbbbbb'
+    'bump @acme/api@aaaaaaa, @acme/sdk@bbbbbbb'
   );
   assert.equal(
     interpolateCommand('echo {bumps}', multi),
-    'echo @umbrella/api@aaaaaaa, @umbrella/web-client@bbbbbbb'
+    'echo @acme/api@aaaaaaa, @acme/sdk@bbbbbbb'
   );
 });
 

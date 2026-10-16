@@ -47,10 +47,10 @@ test('push → dependent hedefte yalnızca lock dosyası commit\'lenir', async (
   g(['init', '-q', '-b', 'main'], target);
   g(['config', 'user.email', 't@t.t'], target);
   g(['config', 'user.name', 't'], target);
-  fs.writeFileSync(path.join(target, 'deps.lock'), 'source=old\n');
+  fs.writeFileSync(path.join(target, 'yarn.lock'), 'source=old\n');
   fs.writeFileSync(
     path.join(target, 'bump.sh'),
-    '#!/usr/bin/env bash\necho "source=new $*" > deps.lock\n',
+    '#!/usr/bin/env bash\necho "source=new $*" > yarn.lock\n',
     { mode: 0o755 }
   );
   fs.writeFileSync(path.join(target, 'src.js'), 'export const x = 1;\n');
@@ -90,9 +90,9 @@ test('push → dependent hedefte yalnızca lock dosyası commit\'lenir', async (
   assert.equal(done.length, 1);
   assert.equal(done[0].tally.committed, 1);
 
-  // only deps.lock was committed
+  // only yarn.lock was committed
   const files = g(['show', '--name-only', '--format=', 'HEAD'], target).split('\n').filter(Boolean);
-  assert.deepEqual(files, ['deps.lock']);
+  assert.deepEqual(files, ['yarn.lock']);
 
   // commit message templated
   const msg = g(['show', '-s', '--format=%s', 'HEAD'], target);
@@ -102,7 +102,7 @@ test('push → dependent hedefte yalnızca lock dosyası commit\'lenir', async (
   assert.match(fs.readFileSync(path.join(target, 'src.js'), 'utf8'), /WIP/);
 
   // lock file content reflects the update command ({pkgs} = source name)
-  assert.match(fs.readFileSync(path.join(target, 'deps.lock'), 'utf8'), /source=new my-source/);
+  assert.match(fs.readFileSync(path.join(target, 'yarn.lock'), 'utf8'), /source=new my-source/);
 });
 
 test('önceden kirli hedef dosyasındaki güncelleme sessizce kaybolmaz', async () => {
@@ -121,17 +121,17 @@ test('önceden kirli hedef dosyasındaki güncelleme sessizce kaybolmaz', async 
   g(['init', '-q', '-b', 'main'], target);
   g(['config', 'user.email', 't@t.t'], target);
   g(['config', 'user.name', 't'], target);
-  fs.writeFileSync(path.join(target, 'deps.lock'), 'v1\n');
+  fs.writeFileSync(path.join(target, 'yarn.lock'), 'v1\n');
   fs.writeFileSync(
     path.join(target, 'bump.sh'),
-    '#!/usr/bin/env bash\necho "v3" > deps.lock\n',
+    '#!/usr/bin/env bash\necho "v3" > yarn.lock\n',
     { mode: 0o755 }
   );
   g(['add', '-A'], target);
   g(['commit', '-qm', 'init'], target);
 
-  // kullanıcı deps.lock üzerinde zaten çalışıyor (kirli) — komut da onu değiştirecek
-  fs.writeFileSync(path.join(target, 'deps.lock'), 'v2-WIP\n');
+  // kullanıcı yarn.lock üzerinde zaten çalışıyor (kirli) — komut da onu değiştirecek
+  fs.writeFileSync(path.join(target, 'yarn.lock'), 'v2-WIP\n');
 
   const config = resolveConfig({
     notifications: false,
@@ -155,6 +155,6 @@ test('önceden kirli hedef dosyasındaki güncelleme sessizce kaybolmaz', async 
   assert.equal(result.status, 'skipped');
   assert.match(result.message, /önceden kirli/);
   // kullanıcının + komutun üst üste bindiği hâl korunur, geri alınmaz/commit'lenmez
-  assert.equal(fs.readFileSync(path.join(target, 'deps.lock'), 'utf8'), 'v3\n');
+  assert.equal(fs.readFileSync(path.join(target, 'yarn.lock'), 'utf8'), 'v3\n');
   assert.equal(g(['status', '--porcelain'], target).trim() !== '', true); // hâlâ kirli, commit atılmadı
 });

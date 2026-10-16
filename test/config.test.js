@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveConfig, validateConfig, collectWarnings, ConfigError } from '../src/config.js';
+import { resolveConfig, validateConfig, collectWarnings, ConfigError, DEFAULT_COMMIT_PATHS } from '../src/config.js';
 
 test('geçersiz kök tipi net hata verir', () => {
   assert.throws(() => validateConfig([]), ConfigError);
@@ -131,7 +131,7 @@ test('repo düzeyi branches hedefe iner', () => {
   assert.deepEqual(cfg.repos[0].packages[0].branches, ['develop']);
 });
 
-test('kullanıcının örnek dosyası geçerli', async () => {
+test('örnek config dosyası geçerli', async () => {
   const { readFileSync } = await import('node:fs');
   const raw = JSON.parse(
     readFileSync(new URL('../examples/config.json', import.meta.url), 'utf8')
@@ -152,4 +152,38 @@ test('squash varsayılan olarak açık, defaults ve paket düzeyinde override ed
 
   assert.throws(() => validateConfig({ defaults: { squash: 'yes' } }), /defaults\.squash/);
   assert.deepEqual(collectWarnings({ defaults: { squash: true } }), []);
+});
+
+test('commitPaths: varsayılan liste, defaults ve hedef düzeyinde override (hedef listesi varsayılanın yerine geçer)', () => {
+  const def = resolveConfig({ repos: [{ path: '~/s', packages: [{ path: '~/t' }] }] });
+  assert.deepEqual(def.repos[0].packages[0].commitPaths, [...DEFAULT_COMMIT_PATHS]);
+  assert.ok(DEFAULT_COMMIT_PATHS.includes('package-lock.json'));
+  assert.ok(DEFAULT_COMMIT_PATHS.includes('composer.lock'));
+
+  const cfg = resolveConfig({
+    defaults: { commitPaths: ['yarn.lock', 'package.json'] },
+    repos: [{ path: '~/s', packages: [{ path: '~/t1' }, { path: '~/t2', commitPaths: ['/deps.lock'] }] }]
+  });
+  assert.deepEqual(cfg.repos[0].packages[0].commitPaths, ['yarn.lock', 'package.json']);
+  assert.deepEqual(cfg.repos[0].packages[1].commitPaths, ['/deps.lock']);
+
+  assert.deepEqual(
+    collectWarnings({ defaults: { commitPaths: ['x'] }, repos: [{ path: '~/a', packages: [{ path: '~/b', commitPaths: ['y'] }] }] }),
+    []
+  );
+});
+
+test('commitPaths: geçersiz değerler alan yoluyla reddedilir', () => {
+  const pkg = (commitPaths) => ({ repos: [{ path: '~/a', packages: [{ path: '~/b', commitPaths }] }] });
+
+  assert.throws(() => validateConfig({ defaults: { commitPaths: 'yarn.lock' } }), /defaults\.commitPaths: /);
+  assert.throws(() => validateConfig({ defaults: { commitPaths: [] } }), /defaults\.commitPaths: en az bir/);
+  assert.throws(() => validateConfig(pkg(['yarn.lock', 42])), /repos\[0\]\.packages\[0\]\.commitPaths\[1\]/);
+  assert.throws(() => validateConfig(pkg(['  '])), /packages\[0\]\.commitPaths\[0\]/);
+  assert.throws(() => validateConfig(pkg(['!yarn.lock'])), /commitPaths\[0\].*olumsuzlama/);
+  assert.throws(() => validateConfig(pkg(['{a,b'])), /commitPaths\[0\].*kapanmayan/);
+  assert.throws(() => validateConfig(pkg(['/'])), ConfigError);
+  assert.throws(() => resolveConfig(pkg({ glob: 'x' })), /packages\[0\]\.commitPaths/);
+
+  assert.doesNotThrow(() => validateConfig(pkg(['**/*.lock', 'apps/*/package.json', '{go.mod,go.sum}'])));
 });

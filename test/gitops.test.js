@@ -14,6 +14,7 @@ import {
   remoteTip
 } from '../src/gitops.js';
 import { git } from '../src/exec.js';
+import { createPathMatcher } from '../src/glob.js';
 
 test('yalnızca komutun değiştirdiği dosya commit\'lenir, kirli dosya korunur', () => {
   const { dir, cleanup } = tmpDir('updeps-git-');
@@ -68,11 +69,41 @@ test('safeRollback kirli dosyaya dokunmaz, temiz-değişeni geri alır', () => {
     fs.writeFileSync(path.join(dir, 'new.txt'), 'created by command\n');
     const after = statusSnapshot(dir);
 
-    safeRollback(dir, before, after);
+    // üçü de commitPaths kapsamında: korunanlar yalnızca önceden kirli/takipsiz oldukları için korunur
+    const res = safeRollback(dir, before, after, createPathMatcher(['*.json', '*.txt']));
 
     assert.equal(fs.readFileSync(path.join(dir, 'lock.json'), 'utf8'), 'A\n'); // geri alındı
     assert.equal(fs.readFileSync(path.join(dir, 'wip.txt'), 'utf8'), 'command clobber\n'); // dokunulmadı
     assert.ok(fs.existsSync(path.join(dir, 'new.txt'))); // takipsiz, silinmedi
+    assert.deepEqual(res, { reverted: ['lock.json'], otherFiles: [] });
+  } finally {
+    cleanup();
+  }
+});
+
+test('safeRollback commitPaths dışındaki temiz-değişen dosyaya dokunmaz, onu raporlar', () => {
+  const { dir, cleanup } = tmpDir('updeps-git-');
+  try {
+    const { git: g } = initGitRepo(dir);
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), 'A\n');
+    fs.writeFileSync(path.join(dir, 'src', 'a.js'), 'base\n');
+    g(['add', '-A']);
+    g(['commit', '-qm', 'base']);
+
+    const before = statusSnapshot(dir);
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), 'B\n'); // komut
+    fs.writeFileSync(path.join(dir, 'src', 'a.js'), 'başka süreç\n'); // başka bir süreç
+    fs.writeFileSync(path.join(dir, 'notes.md'), 'not\n'); // başka bir süreç
+    const after = statusSnapshot(dir);
+
+    const res = safeRollback(dir, before, after, createPathMatcher(['package-lock.json']));
+
+    assert.equal(fs.readFileSync(path.join(dir, 'package-lock.json'), 'utf8'), 'A\n');
+    assert.equal(fs.readFileSync(path.join(dir, 'src', 'a.js'), 'utf8'), 'başka süreç\n');
+    assert.ok(fs.existsSync(path.join(dir, 'notes.md')));
+    assert.deepEqual(res.reverted, ['package-lock.json']);
+    assert.deepEqual(res.otherFiles.sort(), ['notes.md', 'src/a.js']);
   } finally {
     cleanup();
   }

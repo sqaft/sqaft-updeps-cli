@@ -23,7 +23,7 @@ function g(args, cwd) {
 }
 
 let seq = 0;
-/** Repo with one pushed commit (bare remote `origin`) and a bump script that appends a line to deps.lock. */
+/** Repo with one pushed commit (bare remote `origin`) and a bump script that appends a line to yarn.lock. */
 function makeTarget(extraConfig = {}) {
   const base = path.join(dir, `t${++seq}`);
   const remote = path.join(base, 'remote.git');
@@ -31,8 +31,8 @@ function makeTarget(extraConfig = {}) {
   fs.mkdirSync(remote, { recursive: true });
   g(['init', '-q', '--bare', '-b', 'main'], remote);
   initGitRepo(work);
-  fs.writeFileSync(path.join(work, 'deps.lock'), '');
-  fs.writeFileSync(path.join(work, 'bump.sh'), 'echo "$1 $RANDOM$RANDOM" >> deps.lock\n');
+  fs.writeFileSync(path.join(work, 'yarn.lock'), '');
+  fs.writeFileSync(path.join(work, 'bump.sh'), 'echo "$1 $RANDOM$RANDOM" >> yarn.lock\n');
   g(['add', '-A'], work);
   g(['commit', '-qm', 'base'], work);
   g(['remote', 'add', 'origin', remote], work);
@@ -75,7 +75,7 @@ test('ardışık updeps commit\'leri tek commit\'e birleşir, mesaj tüm bump\'l
   assert.equal(msg, 'chore(deps): bump a@3000000, b@2000000');
 
   // üç güncellemenin hepsi dosyada duruyor
-  assert.equal(fs.readFileSync(path.join(t.work, 'deps.lock'), 'utf8').trim().split('\n').length, 3);
+  assert.equal(fs.readFileSync(path.join(t.work, 'yarn.lock'), 'utf8').trim().split('\n').length, 3);
   // state: yalnızca güncel commit kayıtlı
   const recorded = loadState().autoCommits[t.work];
   assert.equal(recorded.length, 1);
@@ -145,8 +145,8 @@ test('kullanıcının kirli/staged dosyaları birleştirmeden etkilenmez', async
 
   assert.equal(count(t), 1);
   const files = g(['show', '--name-only', '--format=', 'HEAD'], t.work).split('\n');
-  assert.deepEqual(files, ['deps.lock']);
-  // kullanıcının durumu aynen duruyor (deps.lock commit'lendi, o yüzden listeden çıkmış olur)
+  assert.deepEqual(files, ['yarn.lock']);
+  // kullanıcının durumu aynen duruyor (yarn.lock commit'lendi, o yüzden listeden çıkmış olur)
   assert.equal(g(['status', '--porcelain'], t.work), statusBefore);
   assert.equal(fs.readFileSync(path.join(t.work, 'README.md'), 'utf8'), '# wip\n');
 });
@@ -209,7 +209,7 @@ test('squashOnto: ağaç birebir aynı kalır', async () => {
   // c sonrası: tek commit; ağacı, c'nin eklediği satır dahil 3 satırı içerir
   assert.equal(count(t), 1);
   assert.notEqual(g(['rev-parse', 'HEAD^{tree}'], t.work), treeBefore);
-  assert.equal(g(['show', 'HEAD:deps.lock'], t.work).trim().split('\n').length, 3);
+  assert.equal(g(['show', 'HEAD:yarn.lock'], t.work).trim().split('\n').length, 3);
 });
 
 test('kısmen push edilmiş zincirde yalnızca push edilmemiş kısım birleşir', async () => {

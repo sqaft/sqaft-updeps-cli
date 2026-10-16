@@ -76,6 +76,7 @@ export function cmdShow(positionals) {
     } else {
       console.log(styleText('dim', `    ${t.message}`));
     }
+    for (const w of t.warnings || []) console.log(styleText('yellow', `    ! ${w}`));
     console.log('');
   }
 }

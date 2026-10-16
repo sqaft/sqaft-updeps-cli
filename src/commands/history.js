@@ -68,6 +68,7 @@ export function cmdHistory(opts = {}) {
     } else if (r.status === 'committed' && r.message) {
       console.log(styleText('dim', `  ${r.commitSha ? r.commitSha + ' ' : ''}${r.message}`));
     }
+    for (const w of r.warnings || []) console.log(styleText('yellow', `  ! ${w}`));
   }
 
   console.log(

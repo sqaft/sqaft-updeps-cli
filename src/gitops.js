@@ -55,8 +55,11 @@ export function statusSnapshot(cwd) {
 }
 
 /**
- * Paths that the commands touched: present in `after` and either absent from
- * `before` or with a different status code.
+ * Paths that changed while the commands ran: present in `after` and either
+ * absent from `before` or with a different status code. Not every one of them
+ * was written by the commands — another process (an editor, a build watcher)
+ * may have touched files in the same window — so callers narrow this list
+ * down with the target's `commitPaths` before committing or reverting.
  * @param {Map<string,string>} before
  * @param {Map<string,string>} after
  * @returns {{ tracked: string[], untracked: string[] }}
@@ -220,32 +223,43 @@ export function hashPaths(cwd, paths) {
 }
 
 /**
- * Reverts only the changes the commands made to files that were clean
- * beforehand. Files dirty before the run are never touched. Newly created
- * untracked files are left in place and reported.
+ * Undoes a failed (or dry) run: reverts the tracked files that were clean
+ * beforehand, changed while the commands ran and match `isCommitPath`. Files
+ * dirty before the run are never touched. Changed paths outside
+ * `isCommitPath` are left as they are and returned for the caller to report:
+ * another process may have written them in the meantime, and reverting them
+ * would discard that work. Untracked files are never deleted.
  * @param {string} cwd
  * @param {Map<string,string>} before
  * @param {Map<string,string>} after
+ * @param {(filePath: string) => boolean} isCommitPath  from `createPathMatcher(target.commitPaths)`
+ * @returns {{ reverted: string[], otherFiles: string[] }}  `otherFiles`: changed paths outside `isCommitPath`, left untouched
  */
-export function safeRollback(cwd, before, after) {
+export function safeRollback(cwd, before, after, isCommitPath) {
   const { tracked, untracked } = diffSnapshots(before, after);
-  const toRevert = tracked.filter((p) => !before.has(p));
+  const otherFiles = [...tracked, ...untracked].filter((p) => !isCommitPath(p));
+  const ownTracked = tracked.filter(isCommitPath);
+  const toRevert = ownTracked.filter((p) => !before.has(p));
+  let reverted = [];
   if (toRevert.length > 0) {
     try {
       gitOrThrow(['checkout', '--', ...toRevert], cwd);
+      reverted = toRevert;
     } catch (err) {
       logger.warn(`[rollback] geri alınamadı: ${err.message}`);
     }
   }
-  const keptDirty = tracked.filter((p) => before.has(p));
+  const keptDirty = ownTracked.filter((p) => before.has(p));
   if (keptDirty.length > 0) {
     logger.warn(
       `[rollback] komut öncesi zaten kirli olan dosyalar korundu, geri alınmadı: ${keptDirty.join(', ')}`
     );
   }
-  if (untracked.length > 0) {
-    logger.warn(`[rollback] komutun oluşturduğu takipsiz dosyalar silinmedi: ${untracked.join(', ')}`);
+  const ownUntracked = untracked.filter(isCommitPath);
+  if (ownUntracked.length > 0) {
+    logger.warn(`[rollback] komut sırasında oluşan takipsiz dosyalar silinmedi: ${ownUntracked.join(', ')}`);
   }
+  return { reverted, otherFiles };
 }
 
 /**

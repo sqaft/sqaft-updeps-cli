@@ -25,8 +25,11 @@ bilir, repolar araçtan habersizdir.
    için sırayla (tüm sistemde aynı anda tek iş):
    - hedef repo kilitlenir (`mkdir` tabanlı, macOS'ta `flock` yok),
    - `commands` çalıştırılır,
-   - **yalnızca komutun değiştirdiği dosyalar** commit'lenir (senin kaydedilmemiş
-     işine dokunulmaz),
+   - komut sırasında değişen dosyalardan **yalnızca `commitPaths` ile
+     eşleşenler** (varsayılan: kilit dosyaları ve manifestler) commit'lenir;
+     senin kaydedilmemiş işine dokunulmaz, listenin dışındaki değişiklikler
+     (örn. komut sırasında başka bir sürecin dokunduğu dosyalar) yerinde
+     bırakılıp uyarı olarak raporlanır,
    - `push: true` ise push edilir (varsayılan: hayır).
 4. Kaynak başına tek bir macOS bildirimi: `3 commit, 2 güncel, 0 hata`.
 
@@ -85,6 +88,7 @@ kılmaz — sessizce yok sayılıp varsayılana düşmek yerine `updeps doctor`
     "staleLockSec": 900,                  // bu kadar eski kilit "bayat" sayılır
     "waitTimeoutSec": 0,                  // 0 = kilit için sınırsız bekle
     "dirtyPolicy": "selective",           // selective | skip
+    // "commitPaths": [...]               // commit'lenecek dosyalar (glob); varsayılan için bkz. "commitPaths"
     "push": false,
     "coalesce": true,                     // bkz. "Eşzamanlılık"
     "squash": true                        // bkz. "Önceki update commit'lerini birleştirme"
@@ -103,7 +107,8 @@ kılmaz — sessizce yok sayılıp varsayılana düşmek yerine `updeps doctor`
           "push": false,
           "squash": true,
           "commandTimeout": 300,
-          "dirtyPolicy": "selective"
+          "dirtyPolicy": "selective",
+          "commitPaths": ["package.json", "yarn.lock"]  // varsayılan listenin yerine geçer
         }
       ]
     }
@@ -111,7 +116,7 @@ kılmaz — sessizce yok sayılıp varsayılana düşmek yerine `updeps doctor`
 }
 ```
 
-Gerçek, çok organizasyonlu bir örnek için: [`examples/config.json`](examples/config.json)
+Çok organizasyonlu bir örnek için: [`examples/config.json`](examples/config.json)
 (`updeps init --example` ile bunu yazar).
 
 ### `name` alanının iki anlamı
@@ -150,14 +155,55 @@ SHA tutarsızlığı oluşmaz — lockfile parse etmeye gerek kalmadan.
 ### `dirtyPolicy`
 
 - **`selective`** (varsayılan): hedef repoda kaydedilmemiş değişikliğin olsa bile
-  çalışır; komut öncesi/sonrası `git status` farkı alınır ve **yalnızca komutun
-  dokunduğu dosyalar** stage'lenip commit'lenir. Senin işine dokunulmaz.
+  çalışır; komut öncesi/sonrası `git status` farkı alınır ve farktaki
+  dosyalardan **yalnızca [`commitPaths`](#commitpaths) ile eşleşenler**
+  stage'lenip commit'lenir. Senin kaydedilmemiş işine dokunulmaz;
   `git add -A` hiçbir zaman kullanılmaz.
 - **`skip`**: hedef working tree kirliyse hiç dokunma, "atlandı" bildir.
 
-Komut hata verirse, yalnızca **komut öncesi temiz olan** ve komutun değiştirdiği
-takipli dosyalar geri alınır. `git reset --hard` / `git clean -fd` hiçbir koşulda
+Komut çalışırken başka bir süreç de (editör, build watcher, başka bir araç) repoda
+dosya oluşturabilir veya düzenleyebilir; `git status` farkı bunu komutun
+yaptığından ayıramaz. Bu yüzden farktaki `commitPaths` dışı dosyalar (takipli ya
+da takipsiz) ne commit'lenir ne geri alınır: yerinde bırakılır ve uyarı olarak
+log'a ve çalışma sonucuna yazılır (`updeps show`, `updeps history`, journal'da
+`otherFiles` / `warnings`).
+
+Komut hata verirse yalnızca **komut öncesi temiz olan**, komut sırasında değişen
+ve `commitPaths` ile eşleşen takipli dosyalar geri alınır; diğer değişikliklere
+dokunulmaz, takipsiz dosyalar silinmez. `--dry-run` de commit atmadan aynı
+kuralla geri alır. `git reset --hard` / `git clean -fd` hiçbir koşulda
 çalıştırılmaz.
+
+### `commitPaths`
+
+Bir hedefte commit'lenebilecek dosyaların glob listesi. `defaults` veya hedef
+düzeyinde verilir; hedef düzeyindeki liste varsayılanın yerine geçer (birleşmez).
+Varsayılan, yaygın paket yöneticilerinin kilit dosyaları ve manifestleridir (her
+derinlikte):
+
+```
+package.json  package-lock.json  npm-shrinkwrap.json  yarn.lock  pnpm-lock.yaml
+bun.lock  bun.lockb  composer.json  composer.lock  Cargo.toml  Cargo.lock
+go.mod  go.sum  Gemfile.lock  poetry.lock  uv.lock  Package.resolved  pubspec.lock
+```
+
+Komut sırasında değişen bir yol listedeki bir desenle eşleşirse commit'lenir;
+yeni oluşan (takipsiz) dosyalar da yalnızca eşleşirlerse commit'lenir. Desenler
+repo köküne göre göreli yollarla eşleştirilir:
+
+| Desen | Anlamı |
+|---|---|
+| `yarn.lock` | `/` içermeyen desen her derinlikteki dosya adıyla eşleşir (`yarn.lock`, `packages/web/yarn.lock`) |
+| `/package.json`, `apps/*/package.json` | `/` ile başlayan ya da `/` içeren desen repo köküne sabitlenir |
+| `*`, `?` | `/` dışında herhangi bir karakter dizisi / tek karakter |
+| `gen/**/*.json` | `**` tam bir yol parçası olarak sıfır veya daha fazla dizinle eşleşir |
+| `generated/` | `/` ile biten desen o dizinin altındaki her şeyle eşleşir |
+| `{go.mod,go.sum}` | seçeneklerden biri (iç içe olamaz) |
+
+`!` ile olumsuzlama desteklenmez. Boş liste, boş/geçersiz desen (kapanmayan
+`{` gibi) config doğrulamasında reddedilir. Komutun ürettiği her dosyanın
+commit'lenmesi isteniyorsa `["**"]` verilebilir; bu durumda komut sırasında
+başka süreçlerin yaptığı değişiklikler de commit'e girer.
 
 ### Önceki update commit'lerini birleştirme (`squash`)
 
@@ -338,8 +384,9 @@ npm test        # node:test, ek bağımlılık yok
 ## Notlar
 
 - Komut `.gitignore`'lu bir dosyayı (`node_modules/` gibi) değiştirirse
-  `git status`'ta görünmez — bu istenen davranıştır. Komut hiç izlenen dosya
-  değiştirmezse sonuç "güncel" (unchanged) olur.
+  `git status`'ta görünmez — bu istenen davranıştır. Komut `commitPaths` ile
+  eşleşen hiçbir dosyayı değiştirmezse sonuç "güncel" (unchanged) olur;
+  eşleşmeyen değişiklikler varsa uyarı olarak görünür.
 
 ---
 
