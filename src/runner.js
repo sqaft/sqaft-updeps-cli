@@ -19,7 +19,7 @@ import {
 import { loadState, updateState } from './state.js';
 import { appendEvent } from './journal.js';
 import { redact } from './redact.js';
-import { sendNotification, refreshSwiftBar } from './notify.js';
+import { sendNotification, refreshMenubar } from './notify.js';
 
 /**
  * @typedef {object} TriggerContext
@@ -296,7 +296,7 @@ export async function runTarget({
     };
     return state;
   });
-  refreshSwiftBar();
+  refreshMenubar();
 
   try {
     const pre = checkPreconditions(target.path);
@@ -332,7 +332,8 @@ export async function runTarget({
       sourcePath: trigger.sourcePath || '',
       sourceBranch: trigger.branch || '',
       targetPath: target.path,
-      targetBranch: activeBranch(target.path)
+      targetBranch: activeBranch(target.path),
+      shell: target.shell
     };
 
     logger.info(`[${label}] starting update (source: ${source})`);
@@ -346,7 +347,8 @@ export async function runTarget({
         cwd: target.path,
         timeoutMs: target.commandTimeout * 1000,
         env: { CI: '1' },
-        signal
+        signal,
+        shell: target.shell
       });
       if (result.timedOut || result.aborted || result.code !== 0) {
         const why = result.aborted
@@ -480,7 +482,7 @@ export async function runTarget({
       }
       return state;
     });
-    refreshSwiftBar();
+    refreshMenubar();
   }
 }
 

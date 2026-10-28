@@ -6,8 +6,11 @@ on:
 
 jobs:
   test:
-    # package.json restricts installs to darwin (this is a macOS-only CLI/daemon)
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,8 +27,7 @@ jobs:
     # Publishes to npm when package.json has a version that is not on npm yet.
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # macOS because the package is darwin-only (npm ci and the tests need it).
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write # OIDC token for npm trusted publishing

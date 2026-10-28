@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { tmpDir } from './helpers.js';
+import { tmpDir, TEST_SHELL } from './helpers.js';
 
 const { dir, cleanup } = tmpDir('updeps-runner-');
 process.env.XDG_STATE_HOME = dir;
@@ -55,7 +55,7 @@ test('runTarget: a command cancelled via AbortSignal ends as "failed" and the lo
 
   const config = resolveConfig({
     notifications: false,
-    defaults: { commandTimeout: 30 },
+    defaults: { commandTimeout: 30, shell: TEST_SHELL },
     repos: [
       {
         path: target, // source == target, only so runTarget can be called directly
@@ -111,7 +111,7 @@ function makeTargetRepo(packageOverrides = {}) {
   const build = (commands) => {
     const config = resolveConfig({
       notifications: false,
-      defaults: { commandTimeout: 30 },
+      defaults: { commandTimeout: 30, shell: TEST_SHELL },
       repos: [{ path: repo, name: 'src', packages: [{ path: repo, name: 'tgt', commands, ...packageOverrides }] }]
     });
     return { config, target: config.repos[0].packages[0] };

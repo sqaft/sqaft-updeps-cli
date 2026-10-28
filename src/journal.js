@@ -67,6 +67,35 @@ export function readEvents({ limit = Infinity, filter, includeRotated = true } =
 }
 
 /**
+ * One run group from the journal: by group id, or the most recent group a
+ * target or source name took part in. A coalesced target run belongs to every
+ * group whose trigger merged into it, not just the one that happened to start
+ * it first (see runner.js `recordTargetResult`'s `groups` field).
+ * @param {string} selector  group id, target name or source name
+ * @returns {{ group: string, start: object|null, done: object|null, targets: object[] } | null}
+ *   events in chronological order; null when nothing matches
+ */
+export function findRun(selector) {
+  const all = readEvents({ limit: 5000 });
+  const inGroup = (r, id) => r.group === id || (Array.isArray(r.groups) && r.groups.includes(id));
+
+  let group = selector;
+  if (!all.some((r) => inGroup(r, selector))) {
+    const match = all.find((r) => r.kind === 'target' && (r.target === selector || r.source === selector));
+    if (!match) return null;
+    group = match.group;
+  }
+
+  const events = all.filter((r) => inGroup(r, group)).reverse(); // chronological
+  return {
+    group,
+    start: events.find((r) => r.kind === 'group_start') || null,
+    done: events.find((r) => r.kind === 'group_done') || null,
+    targets: events.filter((r) => r.kind === 'target')
+  };
+}
+
+/**
  * Parses a `--since` value: `30m`, `2h`, `3d`, `1w`, or an ISO date.
  * @param {string} value
  * @returns {number} epoch ms, or 0 if unparseable

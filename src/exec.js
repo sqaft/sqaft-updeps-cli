@@ -1,35 +1,71 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 
+const isWindows = process.platform === 'win32';
+
 /**
- * Quotes a single argument for safe inclusion in a POSIX shell command.
+ * The quoting rules a shell follows, derived from the `shell` setting: no
+ * setting is the platform default (`/bin/sh` on macOS and Linux, cmd.exe on
+ * Windows); otherwise the executable's name decides.
+ * @param {string|null|undefined} shell
+ * @returns {'posix'|'cmd'|'powershell'}
+ */
+export function shellKind(shell) {
+  if (!shell) return isWindows ? 'cmd' : 'posix';
+  const name = path.win32.basename(path.posix.basename(shell)).toLowerCase().replace(/\.exe$/, '');
+  if (name === 'cmd') return 'cmd';
+  if (name === 'pwsh' || name === 'powershell') return 'powershell';
+  return 'posix';
+}
+
+/**
+ * Quotes a single argument for safe inclusion in a command line of the given
+ * shell kind (POSIX shell by default).
  * @param {string} arg
+ * @param {'posix'|'cmd'|'powershell'} [kind='posix']
  * @returns {string}
  */
-export function shellQuote(arg) {
+export function shellQuote(arg, kind = 'posix') {
+  if (kind === 'cmd') {
+    if (/^[A-Za-z0-9_@+=:,./\\-]+$/.test(arg)) return arg;
+    return '"' + arg.replace(/"/g, '""') + '"';
+  }
+  if (kind === 'powershell') {
+    // `@` starts a splat and `,` builds an array in PowerShell, so neither is left bare.
+    if (/^[A-Za-z0-9_+=:./\\-]+$/.test(arg)) return arg;
+    return "'" + arg.replace(/'/g, "''") + "'";
+  }
   if (arg === '') return "''";
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
   return "'" + arg.replace(/'/g, `'\\''`) + "'";
 }
 
 /**
- * Kills a process group by its leader pid. Swallows ESRCH (already dead).
+ * Kills a process and everything it spawned. On macOS and Linux the process
+ * leads its own process group, so the group is killed; on Windows
+ * `taskkill /T` walks the tree. Already-dead processes are ignored.
  * @param {number} pid
- * @param {NodeJS.Signals} signal
  */
-function killGroup(pid, signal) {
+function killTree(pid) {
+  if (isWindows) {
+    spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+    return;
+  }
   try {
-    process.kill(-pid, signal);
+    process.kill(-pid, 'SIGKILL');
   } catch (err) {
     if (err.code !== 'ESRCH') throw err;
   }
 }
 
 /**
- * Runs a shell command string in a directory with a hard timeout. The command
- * runs as the leader of its own process group (`detached: true`), so a
- * timeout kills the whole tree it spawned (e.g. npm -> node), not just the
+ * Runs a shell command string in a directory with a hard timeout. A timeout
+ * kills the whole tree the command spawned (e.g. npm -> node), not just the
  * top-level shell — otherwise a stuck grandchild keeps the pipes open and
- * `close` never fires, leaving the run "hung" past its timeout.
+ * `close` never fires, leaving the run "hung" past its timeout. On macOS and
+ * Linux the command leads its own process group (`detached: true`) for this;
+ * on Windows the tree is killed with taskkill and no console window is opened.
  * Resolves with { code, stdout, stderr, timedOut }; never rejects on non-zero exit.
  * @param {string} command
  * @param {object} options
@@ -37,15 +73,17 @@ function killGroup(pid, signal) {
  * @param {number} options.timeoutMs
  * @param {Record<string,string>} [options.env]
  * @param {AbortSignal} [options.signal]
+ * @param {string|null} [options.shell]  shell executable; default: the platform default
  * @returns {Promise<{ code: number|null, stdout: string, stderr: string, timedOut: boolean, aborted: boolean }>}
  */
-export function runShell(command, { cwd, timeoutMs, env, signal }) {
+export function runShell(command, { cwd, timeoutMs, env, signal, shell }) {
   return new Promise((resolve) => {
     const child = spawn(command, {
       cwd,
-      shell: true,
+      shell: shell || true,
       env: { ...process.env, ...env },
-      detached: true
+      detached: !isWindows,
+      windowsHide: true
     });
 
     let stdout = '';
@@ -74,13 +112,13 @@ export function runShell(command, { cwd, timeoutMs, env, signal }) {
 
     const timer = setTimeout(() => {
       timedOut = true;
-      killGroup(child.pid, 'SIGKILL');
+      if (child.pid) killTree(child.pid);
       forceResolveAfterKill();
     }, timeoutMs);
 
     const onAbort = () => {
       aborted = true;
-      killGroup(child.pid, 'SIGKILL');
+      if (child.pid) killTree(child.pid);
       forceResolveAfterKill();
     };
     signal?.addEventListener('abort', onAbort);
@@ -110,7 +148,7 @@ export function runShell(command, { cwd, timeoutMs, env, signal }) {
  */
 export function git(args, cwd, fallback = '') {
   try {
-    const res = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    const res = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
     if (res.status !== 0) return fallback;
     return (res.stdout || '').trim();
   } catch {
@@ -125,7 +163,7 @@ export function git(args, cwd, fallback = '') {
  * @returns {string} trimmed stdout
  */
 export function gitOrThrow(args, cwd) {
-  const res = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const res = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
   if (res.status !== 0) {
     throw new Error(`git ${args.join(' ')} failed: ${(res.stderr || '').trim()}`);
   }
@@ -133,11 +171,16 @@ export function gitOrThrow(args, cwd) {
 }
 
 /**
- * Checks whether an executable is resolvable on PATH.
+ * Checks whether an executable is resolvable on PATH (`where` on Windows,
+ * `command -v` elsewhere).
  * @param {string} name
  * @returns {boolean}
  */
 export function commandExists(name) {
+  if (isWindows) {
+    if (path.isAbsolute(name)) return fs.existsSync(name);
+    return spawnSync('where', [name], { stdio: 'ignore', windowsHide: true }).status === 0;
+  }
   const res = spawnSync('command', ['-v', name], { shell: true, encoding: 'utf8' });
   return res.status === 0;
 }

@@ -22,8 +22,8 @@ COMMANDS
   show <group|target>             Full detail of a run (commands, output, commit)
   logs [-f] [-n N]                Raw log
   doctor                          System health check
-  start | stop | restart          Control the launchd daemon
-  menubar [--install]             SwiftBar/xbar plugin
+  start | stop | restart          Control the background service (daemon)
+  menubar [--install]             SwiftBar/xbar plugin (macOS)
   reset [--yes] [--keep-daemon]   Delete all data except the config (queue + failures)
 
 GLOBAL OPTIONS
@@ -59,7 +59,8 @@ const COMMAND_OPTIONS = {
   },
   logs: { follow: { type: 'boolean', short: 'f' }, lines: { type: 'string', short: 'n' } },
   menubar: { install: { type: 'boolean' } },
-  reset: { yes: { type: 'boolean', short: 'y' }, 'keep-daemon': { type: 'boolean' } }
+  reset: { yes: { type: 'boolean', short: 'y' }, 'keep-daemon': { type: 'boolean' } },
+  daemon: { supervise: { type: 'boolean' }, detach: { type: 'boolean' } }
 };
 
 async function main() {
@@ -129,8 +130,12 @@ async function main() {
       return (await import('../src/commands/menubar.js')).cmdMenubar(values);
     case 'reset':
       return (await import('../src/commands/reset.js')).cmdReset(values);
-    case 'daemon':
-      return (await import('../src/daemon.js')).runDaemon();
+    case 'daemon': {
+      const daemon = await import('../src/daemon.js');
+      if (values.detach) return daemon.detachDaemon();
+      if (values.supervise) return daemon.runSupervisor();
+      return daemon.runDaemon();
+    }
     default:
       console.error(styleText('red', `Unknown command: ${command}`));
       console.log(USAGE);

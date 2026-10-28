@@ -1,8 +1,8 @@
 # @sqaft/updeps-cli
 
-A language- and package-manager-agnostic macOS CLI and background service. When a
-package is `git push`ed, it goes to the other repos that depend on it, runs the
-commands you define, and commits the changed lock files.
+A language- and package-manager-agnostic CLI and background service for macOS,
+Linux and Windows. When a package is `git push`ed, it goes to the other repos that
+depend on it, runs the commands you define, and commits the changed lock files.
 
 Nothing is added to managed repos: no git hooks, no config file, no dependency.
 All definitions live in a single central file; the tool knows about your repos,
@@ -13,7 +13,8 @@ and the repos know nothing about the tool.
 ## How it works
 
 1. A daemon watches only the relevant git reflog files of the source repos you
-   define (`.git/logs/refs/remotes/origin/<branch>`, no polling, FSEvents).
+   define (`.git/logs/refs/remotes/origin/<branch>`; no polling: FSEvents on
+   macOS, inotify on Linux, ReadDirectoryChangesW on Windows).
 2. When you push to a source repo, git updates this file with an
    `update by push` message and the daemon picks up the event. (If the push
    fails, the file is not updated and nothing happens, so no extra verification
@@ -23,7 +24,8 @@ and the repos know nothing about the tool.
    difference enters the normal flow exactly like a live event.
 3. After a short `debounceMs` window, for **every target repo** that depends on
    that source, one at a time (a single job at a time across the whole system):
-   - the target repo is locked (`mkdir`-based, since macOS has no `flock`),
+   - the target repo is locked (`mkdir`-based, which works the same on every
+     platform),
    - the `commands` are run,
    - of the files that changed during the commands, **only those matching
      `commitPaths`** (default: lock files and manifests) are committed; your
@@ -31,7 +33,7 @@ and the repos know nothing about the tool.
      touched by another process while the commands ran) are left in place and
      reported as warnings,
    - if `push: true`, the commit is pushed (default: no).
-4. One macOS notification per source: `3 committed, 2 up to date, 0 failed`.
+4. One desktop notification per source: `3 committed, 2 up to date, 0 failed`.
 
 ---
 
@@ -41,20 +43,23 @@ and the repos know nothing about the tool.
 npm install -g @sqaft/updeps-cli
 ```
 
-Requires macOS and Node.js 22+. This installs the `updeps` and `sqaft-updeps`
-commands.
+Requires macOS, Linux or Windows, git, and Node.js 22+. This installs the
+`updeps` and `sqaft-updeps` commands.
+
+For a graphical view (dependency graph editor, status and failures in the system
+tray), see the desktop app [`@sqaft/updeps-app`](https://github.com/sqaft/sqaft-updeps-app).
 
 ---
 
 ## Quick start
 
 ```bash
-updeps init                 # creates ~/.config/sqaft-updeps/config.json
+updeps init                 # creates the config (see "File locations")
 # (edit the config)
 updeps doctor               # check paths, git remotes, and commands
 updeps graph                # see the dependency tree and the derived {pkgs} lists
 updeps run <source> --dry-run   # try it without committing
-updeps start                # start the launchd daemon
+updeps start                # start the background service (see "Background service")
 updeps status               # state, running job + queue, open failures
 ```
 
@@ -62,7 +67,9 @@ updeps status               # state, running job + queue, open failures
 
 ## Configuration
 
-Location: `~/.config/sqaft-updeps/config.json` (honors `XDG_CONFIG_HOME`).
+Location: `~/.config/sqaft-updeps/config.json` on macOS and Linux,
+`%APPDATA%\sqaft-updeps\config.json` on Windows (`XDG_CONFIG_HOME` is honored on
+every platform).
 
 If you edit this file while the daemon is running, the change is **detected and
 reloaded automatically**; no `updeps restart` is needed. (On invalid JSON or a
@@ -81,6 +88,7 @@ a warning in the `updeps doctor` output and in the daemon log.
     "triggers": ["push"],                 // push | fetch | commit | merge
     "branches": [],                       // empty = the source's default branch (origin/HEAD)
     "commands": ["npm update {pkgs} --no-audit --no-fund"],
+    // "shell": "bash",                   // see "shell"; default: /bin/sh, cmd.exe on Windows
     "commitMessage": "chore(deps): bump {bumps}",
     "commandTimeout": 300,                // seconds
     "debounceMs": 3000,
@@ -102,6 +110,7 @@ a warning in the `updeps doctor` output and in the daemon log.
           "path": "~/workspace/acme/acme-worker",
           "name": "acme-worker",          // label only (log/notification); defaults to the folder name
           "commands": ["yarn upgrade {pkgs}"],
+          "shell": "pwsh",
           "commitMessage": "deps: {bumps}",
           "push": false,
           "squash": true,
@@ -146,11 +155,22 @@ In `commands` and `commitMessage`:
 | Variable | Content |
 |---|---|
 | `{pkg}` | Name of the triggering source |
-| `{pkgs}` | The derived package list (shell-quoted in commands, comma-separated in the commit message) |
+| `{pkgs}` | The derived package list (quoted for the target's [`shell`](#shell) in commands, comma-separated in the commit message) |
 | `{sha}` | 7-character SHA of the triggering commit |
 | `{bumps}` | `{pkg}@{sha}`; if several sources were coalesced into the same target, `a@sha1, b@sha2` |
 | `{sourcePath}` · `{sourceBranch}` | Source repo path / branch |
 | `{targetPath}` · `{targetBranch}` | Target repo path / active branch |
+
+### `shell`
+
+The shell the `commands` run in. It can be set in `defaults` or per target. By
+default commands run in `/bin/sh` on macOS and Linux and in `cmd.exe` on Windows
+(like npm scripts). Set it to the name or path of another shell, such as `"bash"`,
+`"pwsh"`, or `"C:\\Program Files\\Git\\bin\\bash.exe"` (Git for Windows), to write
+commands in that shell's syntax. Names in `{pkgs}` are quoted for the shell:
+POSIX quoting for `sh`, `bash`, `zsh` and the like, double quotes for `cmd.exe`,
+single quotes for PowerShell (`pwsh`, `powershell`), where a name starting with
+`@` is always quoted.
 
 ### `dirtyPolicy`
 
@@ -325,9 +345,38 @@ the remote is ahead, the push is rejected and the command stops.
 | `updeps show <group-id \| target \| source>` | Full detail of a run: commands, output, commit SHA, error output |
 | `updeps logs [-f] [-n N]` | Raw log |
 | `updeps doctor` | System health check |
-| `updeps start` · `stop` · `restart` | launchd daemon control |
-| `updeps menubar [--install]` | SwiftBar / xbar menu bar plugin |
+| `updeps start` · `stop` · `restart` | Background service control (see "Background service"). `stop` stops the daemon until the next login |
+| `updeps menubar [--install]` | SwiftBar / xbar menu bar plugin (macOS) |
 | `updeps reset [--yes] [--keep-daemon]` | Deletes all data **except** the config: queue, open failures, history (journal), raw logs, processed-SHA tracking, locks. If the daemon is running it is restarted to also clear the in-memory queue (skipped with `--keep-daemon`). `--yes` skips the confirmation. The **Maintenance › Clear data** button in the menu bar does the same. |
+
+---
+
+## Background service
+
+`updeps start` installs the daemon as a background service that starts at login
+and is restarted if it crashes, then (re)starts it:
+
+| Platform | Service | Definition |
+|---|---|---|
+| macOS | launchd agent | `~/Library/LaunchAgents/com.sqaft.updeps.daemon.plist` |
+| Linux | systemd user service (`systemctl --user status sqaft-updeps`) | `~/.config/systemd/user/sqaft-updeps.service` |
+| Windows | login script in the Startup folder + the updeps supervisor | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\sqaft-updeps.cmd` |
+
+`updeps stop` stops the daemon; the definition stays, so it starts again at the
+next login. `updeps start` starts it right away.
+
+Where no service manager keeps the daemon running (Windows, and Linux without a
+systemd user session: containers, WSL without systemd, other init systems), the
+updeps supervisor does it: a small background process (`updeps daemon
+--supervise`) that runs the daemon and restarts it after a crash, with a delay
+that grows from 1s to 60s. On Linux without systemd nothing starts it at login;
+`updeps doctor` and `updeps status` say so. On Windows the login script opens a
+console window for a moment at login while it starts the supervisor.
+
+The daemon also listens on a local control channel (a Unix domain socket in the
+state directory, or in the temp directory when that path is too long for a socket
+name; a named pipe on Windows). `updeps stop` uses it to shut a
+supervised daemon down cleanly, since Windows has no signal a process can handle.
 
 ---
 
@@ -351,9 +400,9 @@ currently running, it is queued again after the job finishes.
 
 ## Monitoring and failure tracking
 
-Every operation is written persistently to
-`~/.local/state/sqaft-updeps/journal.jsonl` as a single line of JSON (rotated to
-`.1` at 5MB). You can see it in three places:
+Every operation is written persistently to `journal.jsonl` in the state directory
+(see "File locations") as a single line of JSON (rotated to `.1` at 5MB). You can
+see it in three places:
 
 - **`updeps status`**: what is running right now + queued targets, **unresolved
   open failures**, the last 10 runs. With `--watch` you can leave the terminal
@@ -364,29 +413,40 @@ Every operation is written persistently to
 
 Open failures are kept persistently in `state.json`; when that target next runs
 successfully or with no changes (from the daemon or via `updeps retry --failed`),
-the failure is cleared automatically. The menu bar shows `⚠N` (failures) and `⧗N`
-(running + queued jobs) badges and a clickable list of failures.
+the failure is cleared automatically. The menu bar (SwiftBar/xbar on macOS) and the
+desktop app's tray icon show `⚠N` (failures) and `⧗N` (running + queued jobs)
+badges and a clickable list of failures.
+
+Notifications go through `terminal-notifier` (or `osascript`) on macOS,
+`notify-send` (libnotify) on Linux, and a PowerShell toast on Windows. Set
+`"notifications": false` to turn them off.
 
 ## File locations
 
+| | macOS, Linux | Windows |
+|---|---|---|
+| Config directory | `~/.config/sqaft-updeps/` | `%APPDATA%\sqaft-updeps\` |
+| State directory | `~/.local/state/sqaft-updeps/` | `%LOCALAPPDATA%\sqaft-updeps\` |
+
 ```
-~/.config/sqaft-updeps/config.json                    definitions (you edit this)
-~/.local/state/sqaft-updeps/state.json                runtime state, open failures
-~/.local/state/sqaft-updeps/journal.jsonl             persistent operation journal
-~/.local/state/sqaft-updeps/locks/                    target repo locks
-~/.local/state/sqaft-updeps/logs/updeps.log           raw log (rotated at 5MB)
-~/Library/LaunchAgents/com.sqaft.updeps.daemon.plist  launchd agent
+<config>/config.json          definitions (you edit this)
+<state>/state.json            runtime state, open failures
+<state>/journal.jsonl         persistent operation journal
+<state>/locks/                target repo locks
+<state>/logs/updeps.log       raw log (rotated at 5MB)
+<state>/daemon.sock           control channel (macOS, Linux; a named pipe on Windows)
 ```
 
-If `XDG_CONFIG_HOME` / `XDG_STATE_HOME` are set, they are honored.
+If `XDG_CONFIG_HOME` / `XDG_STATE_HOME` are set, they are honored on every
+platform. The service definitions are listed under "Background service".
 
 ### Node version managers and reinstalls
 
-The launchd agent (`~/Library/LaunchAgents/com.sqaft.updeps.daemon.plist`) and the
-SwiftBar/xbar plugin run `node` through the PATH saved at `updeps start` and
-`updeps menubar --install` (your PATH at that moment, plus the directory of the
-Node running the CLI). They do not pin a Node binary, so Homebrew upgrades and
-switching between installed Node versions keep working.
+The background service (see "Background service") and the SwiftBar/xbar plugin
+run `node` through the PATH saved at `updeps start` and `updeps menubar --install`
+(your PATH at that moment, plus the directory of the Node running the CLI). They
+do not pin a Node binary, so Homebrew upgrades and switching between installed
+Node versions keep working.
 
 It still breaks when no supported Node (see `engines` in `package.json`) remains on
 that PATH, or when the package itself was installed inside a Node version that has
@@ -400,6 +460,34 @@ After upgrading the package, the running daemon is still on the old code until i
 is restarted. `updeps status` (and `updeps doctor`) warn when the installed code
 files are newer than the running daemon; run `updeps restart` to load the new
 code.
+
+---
+
+## API
+
+Tools built on updeps (such as the desktop app) can use its files through a
+programmatic API instead of parsing CLI output:
+
+```js
+import * as updeps from '@sqaft/updeps-cli/api';
+
+const { raw } = updeps.readConfigFile();        // the config as written
+const check = updeps.checkConfig(raw);          // { ok, error, warnings, config, cycles, pkgs }
+updeps.writeConfigFile(raw);                    // validates, then writes atomically; the daemon reloads it
+updeps.inspectRepo('~/workspace/acme/acme-api');// git details + package name from its manifest
+updeps.readStatus();                            // daemon, running job, queue, open failures, recent runs
+updeps.inspectService();                        // how the daemon is installed and what it will run
+updeps.readHistory({ failed: true, since: '3d' });
+updeps.readRun('acme-worker');                  // one run in full, like `updeps show`
+updeps.readLog({ lines: 200 });
+```
+
+`paths` lists the files (config, state, journal, log), so a caller can watch them
+for changes; `resolvePath` and `displayPath` convert between `~/...` and absolute
+paths the way the config does. Updates and daemon control (`run`, `retry`, `start`, `stop`, `reset`)
+are not part of the API: run the CLI at `BIN_PATH` for them. Breaking changes to
+the API follow semver; `API_VERSION` goes up when something a caller may need to
+check for changes.
 
 ---
 
@@ -425,8 +513,9 @@ npm link            # installs the updeps and sqaft-updeps commands
 npm test            # node:test, no extra dependencies
 ```
 
-Publishing happens from CI: when the `version` in `package.json` is not on npm yet,
-the `publish` job in `.github/workflows/test.yml` publishes it after the tests pass.
+CI runs the tests on macOS, Linux and Windows. Publishing happens from CI: when
+the `version` in `package.json` is not on npm yet, the `publish` job in
+`.github/workflows/test.yml` publishes it after the tests pass.
 
 ---
 

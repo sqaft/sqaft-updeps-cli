@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { terminalNotifierArgs, sendNotification } from '../src/notify.js';
+import { terminalNotifierArgs, notifySendArgs, windowsToastScript, sendNotification } from '../src/notify.js';
 import { notifyRunGroup } from '../src/runner.js';
 
 test('success notification argv', () => {
@@ -16,6 +16,26 @@ test('success notification argv', () => {
 test('a failure notification uses the Basso sound', () => {
   const args = terminalNotifierArgs({ type: 'fail', title: 't', message: 'm' });
   assert.equal(args[args.indexOf('-sound') + 1], 'Basso');
+});
+
+test('notify-send argv (Linux): status in the summary, message as the body', () => {
+  assert.deepEqual(notifySendArgs({ type: 'fail', title: 'updeps: lib', message: '-1 failed' }), [
+    '--app-name=updeps',
+    '--icon=dialog-error',
+    '--',
+    'updeps: lib — ❌ failed',
+    '-1 failed'
+  ]);
+});
+
+test('Windows toast script: texts are escaped for the toast XML and the PowerShell string', () => {
+  const script = windowsToastScript({ type: 'ok', title: "it's <lib>", message: 'a & b' });
+  assert.ok(script.includes("<text>it''s &lt;lib&gt;</text>"));
+  assert.ok(script.includes('<text>✅ done</text>'));
+  assert.ok(script.includes('<text>a &amp; b</text>'));
+  // the only single quotes left unescaped delimit PowerShell strings
+  const loadXml = script.split('\n').find((l) => l.startsWith('$xml.LoadXml('));
+  assert.match(loadXml, /^\$xml\.LoadXml\('(?:[^']|'')*'\)$/);
 });
 
 test('notifications:false does nothing (does not throw)', () => {

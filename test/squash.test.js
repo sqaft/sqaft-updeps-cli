@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { tmpDir, initGitRepo } from './helpers.js';
+import { tmpDir, initGitRepo, TEST_SHELL } from './helpers.js';
 
 const { dir, cleanup } = tmpDir('updeps-squash-');
 process.env.XDG_STATE_HOME = path.join(dir, 'state');
@@ -41,7 +41,7 @@ function makeTarget(extraConfig = {}) {
 
   const config = resolveConfig({
     notifications: false,
-    defaults: { commandTimeout: 30, commands: ['bash bump.sh {pkg}'] },
+    defaults: { commandTimeout: 30, commands: ['bash bump.sh {pkg}'], shell: TEST_SHELL },
     repos: [{ path: work, name: 'src', packages: [{ path: work, name: 'tgt', ...extraConfig }] }]
   });
   return { work, baseSha, config, target: config.repos[0].packages[0] };

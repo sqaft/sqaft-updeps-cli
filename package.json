@@ -1,7 +1,7 @@
 {
   "name": "@sqaft/updeps-cli",
   "version": "0.0.2",
-  "description": "Automatically update the repos that depend on a package whenever it is pushed: a language- and package-manager-agnostic macOS CLI and launchd daemon.",
+  "description": "Automatically update the repos that depend on a package whenever it is pushed: a language- and package-manager-agnostic CLI and background service for macOS, Linux and Windows.",
   "keywords": [
     "dependencies",
     "dependency-updates",
@@ -11,6 +11,9 @@
     "push",
     "lockfile",
     "launchd",
+    "systemd",
+    "windows",
+    "linux",
     "macos",
     "cli",
     "automation",
@@ -29,6 +32,7 @@
   "license": "MIT",
   "type": "module",
   "exports": {
+    "./api": "./src/api.js",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -41,7 +45,7 @@
     "examples/"
   ],
   "scripts": {
-    "test": "node --test --test-force-exit --import ./test/setup.js 'test/*.test.js'",
+    "test": "node --test --test-force-exit --import ./test/setup.js \"test/*.test.js\"",
     "start": "node bin/updeps.js daemon",
     "prepublishOnly": "npm test"
   },
@@ -51,9 +55,6 @@
   "engines": {
     "node": ">=22.0.0"
   },
-  "os": [
-    "darwin"
-  ],
   "publishConfig": {
     "access": "public"
   }

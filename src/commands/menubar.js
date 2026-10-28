@@ -4,7 +4,9 @@ import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { styleText } from 'node:util';
 import { loadState } from '../state.js';
-import { runningDaemonPid, inspectAgentPlist, inspectLauncher, launchPath, BIN_PATH } from '../daemon.js';
+import { runningDaemonPid } from '../daemon.js';
+import { inspectLauncher, launchPath, BIN_PATH } from '../launcher.js';
+import { serviceBackend } from '../service/index.js';
 import { resolveHome, tildify } from '../paths.js';
 
 /**
@@ -39,7 +41,7 @@ export function cmdMenubar(opts = {}) {
     'node-too-old': 'Node too old',
     'bin-missing': 'CLI not found'
   };
-  const agentProblem = agentProblems[inspectAgentPlist().problem];
+  const agentProblem = agentProblems[serviceBackend().inspect().problem];
   if (agentProblem) {
     console.log(
       `✗ Daemon cannot start: ${agentProblem} — click to restart | color=red ` +
@@ -207,6 +209,13 @@ export function inspectMenubarPlugin(dir = resolvePluginDir()?.dir ?? null) {
 }
 
 function install() {
+  if (process.platform !== 'darwin') {
+    console.error(
+      styleText('red', 'The menu bar plugin needs SwiftBar or xbar, which run on macOS only.') +
+        '\nOn Windows and Linux, the desktop app shows the same status in the system tray: npm install -g @sqaft/updeps-app'
+    );
+    process.exit(1);
+  }
   const swiftBarInstalled = fs.existsSync('/Applications/SwiftBar.app');
   const found = resolvePluginDir();
 

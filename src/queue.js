@@ -16,6 +16,7 @@ import { appendEvent } from './journal.js';
 function execKey(target) {
   return JSON.stringify({
     commands: target.commands,
+    shell: target.shell,
     commitMessage: target.commitMessage,
     commandTimeout: target.commandTimeout,
     dirtyPolicy: target.dirtyPolicy,

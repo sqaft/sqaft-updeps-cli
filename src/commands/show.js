@@ -1,5 +1,5 @@
 import { styleText } from 'node:util';
-import { readEvents } from '../journal.js';
+import { findRun } from '../journal.js';
 
 /**
  * Shows the full detail of one run: by group id, or the most recent run of a
@@ -13,32 +13,12 @@ export function cmdShow(positionals) {
     process.exit(1);
   }
 
-  // Collect all events, then pick a group.
-  const all = readEvents({ limit: 5000 });
-
-  // A coalesced target run belongs to every group whose trigger merged into
-  // it, not just the one that happened to start it first (see runner.js
-  // `recordTargetResult`'s `groups` field).
-  const inGroup = (r, id) => r.group === id || (Array.isArray(r.groups) && r.groups.includes(id));
-
-  let groupId = selector;
-  const isGroupId = all.some((r) => inGroup(r, selector));
-  if (!isGroupId) {
-    // find most recent target/source match, take its group
-    const match = all.find(
-      (r) => r.kind === 'target' && (r.target === selector || r.source === selector)
-    );
-    if (!match) {
-      console.error(styleText('red', `No record found: ${selector}`));
-      process.exit(1);
-    }
-    groupId = match.group;
+  const run = findRun(selector);
+  if (!run) {
+    console.error(styleText('red', `No record found: ${selector}`));
+    process.exit(1);
   }
-
-  const events = all.filter((r) => inGroup(r, groupId)).reverse(); // chronological
-  const start = events.find((r) => r.kind === 'group_start');
-  const targets = events.filter((r) => r.kind === 'target');
-  const doneEvt = events.find((r) => r.kind === 'group_done');
+  const { group: groupId, start, targets, done: doneEvt } = run;
 
   console.log(styleText('bold', `Run ${groupId}`));
   if (start) {

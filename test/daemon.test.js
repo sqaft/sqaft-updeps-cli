@@ -9,12 +9,16 @@ const { dir, cleanup } = tmpDir('updeps-daemon-');
 process.env.XDG_STATE_HOME = dir;
 process.env.XDG_CONFIG_HOME = dir;
 
-const { inspectAgentPlist, inspectLauncher, renderPlist, launchPath, findInPath, minNodeMajor, BIN_PATH } =
-  await import('../src/daemon.js');
+const { inspectLauncher, launchPath, findInPath, minNodeMajor, BIN_PATH } = await import('../src/launcher.js');
+const { renderPlist, inspect: inspectAgentPlist } = await import('../src/service/launchd.js');
 const { parsePluginScript, inspectMenubarPlugin } = await import('../src/commands/menubar.js');
 
 test.after(cleanup);
 
+const isWindows = process.platform === 'win32';
+const D = path.delimiter;
+/** Tests that run the fake `node` shell scripts below. */
+const posixTest = (name, fn) => test(name, { skip: isWindows && 'fake node scripts need a POSIX shell' }, fn);
 const hasPlutil = spawnSync('plutil', ['-help'], { stdio: 'ignore' }).error === undefined;
 const plistTest = (name, fn) => test(name, { skip: !hasPlutil && 'plutil not available' }, fn);
 
@@ -71,13 +75,14 @@ test('minNodeMajor: reads engines.node from package.json', () => {
 });
 
 test('launchPath: dedupes, keeps order and appends the Node directory', () => {
-  assert.equal(launchPath('/a:/b:/a::/c', '/node/bin'), '/a:/b:/c:/node/bin');
-  assert.equal(launchPath('/a:/node/bin:/b', '/node/bin'), '/a:/node/bin:/b');
+  const join = (...entries) => entries.join(D);
+  assert.equal(launchPath(join('/a', '/b', '/a', '', '/c'), '/node/bin'), join('/a', '/b', '/c', '/node/bin'));
+  assert.equal(launchPath(join('/a', '/node/bin', '/b'), '/node/bin'), join('/a', '/node/bin', '/b'));
   assert.equal(launchPath('', '/node/bin'), '/node/bin');
   assert.equal(launchPath(null, '/node/bin'), '/node/bin');
 });
 
-test('findInPath: first executable in PATH order', () => {
+posixTest('findInPath: first executable in PATH order', () => {
   assert.equal(findInPath('node', `${emptyDir}:${goodNodeDir}:${oldNodeDir}`), path.join(goodNodeDir, 'node'));
   assert.equal(findInPath('node', `${oldNodeDir}:${goodNodeDir}`), path.join(oldNodeDir, 'node'));
   assert.equal(findInPath('node', `${emptyDir}:`), null);
@@ -85,6 +90,13 @@ test('findInPath: first executable in PATH order', () => {
   fs.mkdirSync(plain);
   fs.writeFileSync(path.join(plain, 'node'), '');
   assert.equal(findInPath('node', `${plain}:${goodNodeDir}`), path.join(goodNodeDir, 'node'));
+});
+
+test('findInPath: on Windows a bare name is tried with the PATHEXT extensions', { skip: !isWindows && 'Windows only' }, () => {
+  const exeDir = path.join(dir, 'win-node');
+  fs.mkdirSync(exeDir);
+  fs.writeFileSync(path.join(exeDir, 'node.exe'), '');
+  assert.equal(findInPath('node', `${emptyDir}${D}${exeDir}`).toLowerCase(), path.join(exeDir, 'node.exe').toLowerCase());
 });
 
 plistTest('inspectAgentPlist: no plist means not installed', () => {
@@ -192,7 +204,7 @@ plistTest('renderPlist: runs node through env with the launch PATH, XML-escaped'
   }
 });
 
-test('inspectLauncher: pinned and PATH-resolved Node', () => {
+posixTest('inspectLauncher: pinned and PATH-resolved Node', () => {
   assert.equal(inspectLauncher({ node: null, bin: BIN_PATH }).problem, 'node-missing');
   assert.equal(inspectLauncher({ node: 'node', bin: BIN_PATH, pathEnv: emptyDir }).problem, 'node-missing');
   assert.equal(inspectLauncher({ node: 'node', bin: null, pathEnv: goodNodeDir }).problem, 'bin-missing');
@@ -239,7 +251,7 @@ test('inspectMenubarPlugin: not installed', () => {
   assert.equal(inspectMenubarPlugin(path.join(dir, 'no-such-dir')).installed, false);
 });
 
-test('inspectMenubarPlugin: PATH-based and older forms', () => {
+posixTest('inspectMenubarPlugin: PATH-based and older forms', () => {
   const plugins = path.join(dir, 'plugins');
   fs.mkdirSync(plugins);
   const pluginPath = path.join(plugins, 'updeps.30s.sh');

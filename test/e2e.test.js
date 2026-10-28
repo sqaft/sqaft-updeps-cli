@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { tmpDir } from './helpers.js';
+import { tmpDir, TEST_SHELL } from './helpers.js';
 
 const { dir, cleanup } = tmpDir('updeps-e2e-');
 process.env.XDG_STATE_HOME = path.join(dir, 'state');
@@ -62,7 +62,7 @@ test('push → only the lock file is committed in the dependent target', async (
 
   const config = resolveConfig({
     notifications: false,
-    defaults: { debounceMs: 50, commitMessage: 'deps: {pkg}@{sha}' },
+    defaults: { debounceMs: 50, commitMessage: 'deps: {pkg}@{sha}', shell: TEST_SHELL },
     repos: [
       {
         path: source,
@@ -135,7 +135,7 @@ test('an update to an already-dirty target file is not silently lost', async () 
 
   const config = resolveConfig({
     notifications: false,
-    defaults: { commandTimeout: 30 },
+    defaults: { commandTimeout: 30, shell: TEST_SHELL },
     repos: [
       {
         path: source,

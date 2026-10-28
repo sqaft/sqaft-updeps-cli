@@ -10,7 +10,8 @@ const base = {
   sourcePath: '/src',
   sourceBranch: 'main',
   targetPath: '/tgt',
-  targetBranch: 'main'
+  targetBranch: 'main',
+  shell: '/bin/sh'
 };
 
 test('{pkgs} in a command: multiple packages, scoped names', () => {
@@ -21,6 +22,12 @@ test('{pkgs} in a command: multiple packages, scoped names', () => {
 test('a package name containing a space is shell-quoted', () => {
   const out = interpolateCommand('npm update {pkgs}', { ...base, pkgList: ['weird name'] });
   assert.equal(out, "npm update 'weird name'");
+});
+
+test('{pkgs} is quoted for the shell the command runs in', () => {
+  const vars = { ...base, pkgList: ['weird name', '@acme/api'] };
+  assert.equal(interpolateCommand('npm update {pkgs}', { ...vars, shell: 'cmd.exe' }), 'npm update "weird name" @acme/api');
+  assert.equal(interpolateCommand('npm update {pkgs}', { ...vars, shell: 'pwsh' }), "npm update 'weird name' '@acme/api'");
 });
 
 test('{sha} is shortened to 7 characters, {bumps} is combined', () => {

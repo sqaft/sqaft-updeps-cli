@@ -14,3 +14,12 @@ Trusted publishing (OIDC) requires npm CLI 11.5.1+ and Node 22.14+, while the np
 
 ## 2026-10-28 — `process.execPath` is symlink-resolved, so it must not be written into launchers
 Under Homebrew it is `/opt/homebrew/Cellar/node/<version>/bin/node` rather than `/opt/homebrew/bin/node`, and under nvm it is a version-specific path. A launchd agent or menubar plugin that pins it breaks on the next `brew upgrade node` or when that version is removed. launchd runs jobs with a minimal PATH, so the launchers run `node` through an explicit saved PATH instead (`/usr/bin/env node` in the plist).
+
+## 2026-10-28 — Windows has no catchable SIGTERM, and Task Scheduler does not restart a crashed task
+`process.kill(pid, 'SIGTERM')` on Windows is `TerminateProcess`: the daemon's shutdown handler never runs, so the in-flight command is not rolled back and locks stay behind. A supervised daemon is therefore stopped through its control channel (named pipe). Task Scheduler's "restart on failure" only covers a task that fails to start, not a process that exits non-zero, and `conhost --headless` (to hide a console window) is undocumented and unreliable, so Windows uses a Startup-folder script that starts a Node supervisor detached with `windowsHide`.
+
+## 2026-10-28 — A Unix socket path is limited to about 104 bytes on macOS
+Under a temp `XDG_STATE_HOME` (`/private/var/folders/.../T/...`) the state directory alone gets close to it, and `listen()` fails with a too-long path. The control socket falls back to a hashed name in the temp directory when the state-directory path is too long.
+
+## 2026-10-28 — npm runs scripts through cmd.exe on Windows, which does not strip single quotes
+`node --test 'test/*.test.js'` passes the quotes through on Windows, so the glob matches nothing. Double quotes work in both `sh` and `cmd.exe`.

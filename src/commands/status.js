@@ -1,6 +1,7 @@
 import { styleText } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { agentStatus, minNodeMajor } from '../daemon.js';
+import { serviceStatus } from '../service/index.js';
+import { minNodeMajor } from '../launcher.js';
 import { tildify } from '../paths.js';
 
 /** @param {number} ts */
@@ -20,34 +21,35 @@ function dur(ms) {
 }
 
 /**
- * Warning for a launchd agent whose Node or CLI is missing, too old, or belongs to another install.
- * @param {ReturnType<typeof agentStatus>['agent']} agent
+ * Warning for a service whose Node or CLI is missing, too old, or belongs to another install.
+ * @param {import('../service/index.js').ServiceBackend} backend
+ * @param {import('../service/index.js').ServiceInspection} service
  * @returns {string|null}
  */
-export function agentProblemLine(agent) {
-  switch (agent.problem) {
+export function serviceProblemLine(backend, service) {
+  switch (service.problem) {
     case 'node-missing':
       return styleText(
         'red',
         '  ✗ the daemon cannot start: ' +
-          (agent.node ? `Node binary not found: ${tildify(agent.node)}` : '"node" not found on its PATH') +
+          (service.node ? `Node binary not found: ${tildify(service.node)}` : '"node" not found on its PATH') +
           ' — put a supported Node first on PATH and run "updeps restart"'
       );
     case 'node-too-old':
       return styleText(
         'red',
-        `  ✗ the daemon cannot run: Node ${agent.nodeVersion} (${tildify(agent.node)}) is older than the required ` +
+        `  ✗ the daemon cannot run: Node ${service.nodeVersion} (${tildify(service.node)}) is older than the required ` +
           `v${minNodeMajor()} — put a supported Node first on PATH and run "updeps restart"`
       );
     case 'bin-missing':
       return styleText(
         'red',
-        `  ✗ the daemon cannot start: CLI not found: ${tildify(agent.bin || '')} — run "updeps restart"`
+        `  ✗ the daemon cannot start: CLI not found: ${tildify(service.bin || '')} — run "updeps restart"`
       );
     case 'different-install':
       return styleText(
         'yellow',
-        `  ⚠ the agent runs another install (${tildify(agent.bin)}) — run "updeps restart" to use this one`
+        `  ⚠ the ${backend.label} runs another install (${tildify(service.bin)}) — run "updeps restart" to use this one`
       );
     default:
       return null;
@@ -55,11 +57,17 @@ export function agentProblemLine(agent) {
 }
 
 function render() {
-  const { agentInstalled, agent, daemonPid, daemonStale, state } = agentStatus();
+  const { backend, service, daemonPid, daemonStale, state } = serviceStatus();
   const L = [];
 
   L.push(styleText('bold', 'Daemon'));
-  L.push(`  launchd agent : ${agentInstalled ? styleText('green', 'installed') : styleText('dim', 'not installed')}`);
+  if (backend.file) {
+    L.push(
+      `  ${backend.label.padEnd(14)}: ${service.installed ? styleText('green', 'installed') : styleText('dim', 'not installed')}`
+    );
+  } else {
+    L.push(`  service       : ${styleText('dim', 'none (background process, not started at login)')}`);
+  }
   L.push(
     `  process       : ${daemonPid ? styleText('green', `running (pid ${daemonPid})`) : styleText('yellow', 'not running')}`
   );
@@ -72,7 +80,7 @@ function render() {
       styleText('yellow', '  ⚠ code changed since the daemon started — run "updeps restart"')
     );
   }
-  const problemLine = agentProblemLine(agent);
+  const problemLine = serviceProblemLine(backend, service);
   if (problemLine) L.push(problemLine);
   L.push('');
 

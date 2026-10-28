@@ -31,3 +31,20 @@ export function initGitRepo(dir) {
   run(['commit', '-qm', 'init']);
   return { dir, git: run };
 }
+
+/**
+ * Shell for test commands written in POSIX syntax (`&&`, `;`, `$VAR`, `>`).
+ * The platform default is used on macOS and Linux; on Windows (where the
+ * default is cmd.exe) Git for Windows' bash, which every Windows git install has.
+ * @type {string|undefined}
+ */
+export const TEST_SHELL = process.platform === 'win32' ? findGitBash() : undefined;
+
+function findGitBash() {
+  const res = spawnSync('where', ['git'], { encoding: 'utf8' });
+  for (const line of (res.stdout || '').split(/\r?\n/).filter(Boolean)) {
+    const candidate = path.join(path.dirname(path.dirname(line.trim())), 'bin', 'bash.exe');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return 'bash';
+}

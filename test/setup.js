@@ -6,6 +6,10 @@
 // Test files that need a directory of their own can still assign these
 // variables themselves before importing src modules; this is the safety net for
 // all the others.
+//
+// It also turns off git's line-ending conversion for the throwaway repos the
+// tests create (Git for Windows enables `core.autocrlf` system-wide), so file
+// contents read back from the working tree match what the tests wrote.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +17,11 @@ import path from 'node:path';
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'updeps-xdg-')));
 process.env.XDG_CONFIG_HOME = path.join(root, 'config');
 process.env.XDG_STATE_HOME = path.join(root, 'state');
+
+const gitConfigCount = parseInt(process.env.GIT_CONFIG_COUNT || '0', 10) || 0;
+process.env[`GIT_CONFIG_KEY_${gitConfigCount}`] = 'core.autocrlf';
+process.env[`GIT_CONFIG_VALUE_${gitConfigCount}`] = 'false';
+process.env.GIT_CONFIG_COUNT = String(gitConfigCount + 1);
 
 process.on('exit', () => {
   fs.rmSync(root, { recursive: true, force: true });

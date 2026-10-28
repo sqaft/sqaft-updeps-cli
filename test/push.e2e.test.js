@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { tmpDir } from './helpers.js';
+import { tmpDir, TEST_SHELL } from './helpers.js';
 
 const { dir: root, cleanup } = tmpDir('updeps-push-e2e-');
 const dir = fs.realpathSync(root);
@@ -73,7 +73,7 @@ test('A→B→C: each repo is pushed in dependency order, C is updated only once
 
   const config = resolveConfig({
     notifications: false,
-    defaults: { debounceMs: 50, commands: ['bash bump.sh {pkgs}'] },
+    defaults: { debounceMs: 50, commands: ['bash bump.sh {pkgs}'], shell: TEST_SHELL },
     repos: [
       { path: a, name: 'pkg-a', packages: [{ path: b, name: 'b' }] },
       { path: b, name: 'pkg-b', packages: [{ path: c, name: 'c' }] }
@@ -118,7 +118,7 @@ test('stops and returns the failure when a target update fails', async () => {
 
   const config = resolveConfig({
     notifications: false,
-    defaults: { debounceMs: 50, commands: ['bash bump.sh {pkgs}'] },
+    defaults: { debounceMs: 50, commands: ['bash bump.sh {pkgs}'], shell: TEST_SHELL },
     repos: [
       { path: a, name: 'pkg-a', packages: [{ path: b, name: 'b' }] },
       { path: b, name: 'pkg-b', packages: [{ path: c, name: 'c' }] }
@@ -204,7 +204,7 @@ test('--commit: a committed source change flows to the rest of the chain with th
 
   const config = resolveConfig({
     notifications: false,
-    defaults: { debounceMs: 50, commands: ['bash bump.sh {pkgs}'] },
+    defaults: { debounceMs: 50, commands: ['bash bump.sh {pkgs}'], shell: TEST_SHELL },
     repos: [{ path: a, name: 'pkg-a', packages: [{ path: b, name: 'b' }] }]
   });
   const { watcher } = startDaemon(config);

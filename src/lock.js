@@ -50,7 +50,7 @@ export function releaseHeldLocks() {
 }
 
 /**
- * Acquires an atomic lock for a repo path using mkdir (no flock on macOS).
+ * Acquires an atomic lock for a repo path using mkdir (portable; macOS has no flock).
  * Retries once per second. A lock whose mtime is older than staleLockSec is
  * treated as abandoned and stolen.
  * @param {string} repoPath

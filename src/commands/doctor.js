@@ -2,23 +2,34 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { styleText } from 'node:util';
-import { CONFIG_FILE, LAUNCH_AGENT_PLIST, LOCKS_DIR, tildify } from '../paths.js';
+import { CONFIG_FILE, LOCKS_DIR, tildify } from '../paths.js';
 import { loadConfig } from '../config.js';
 import { git, commandExists } from '../exec.js';
 import { defaultBranch, checkPreconditions } from '../gitops.js';
 import { findCycles } from '../graph.js';
-import { runningDaemonPid, daemonCodeStale, inspectAgentPlist, minNodeMajor } from '../daemon.js';
+import { runningDaemonPid, daemonCodeStale } from '../daemon.js';
+import { minNodeMajor } from '../launcher.js';
+import { serviceBackend } from '../service/index.js';
 import { inspectMenubarPlugin } from './menubar.js';
+
+const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
 
 /** Directories where Node version managers keep their installed versions. */
 const VERSION_MANAGER_DIRS = [
-  '.nvm',
-  '.fnm',
-  path.join('Library', 'Application Support', 'fnm'),
-  '.volta',
-  '.asdf',
-  path.join('.local', 'share', 'mise')
-].map((d) => path.join(os.homedir(), d) + path.sep);
+  ...[
+    '.nvm',
+    '.fnm',
+    path.join('Library', 'Application Support', 'fnm'),
+    path.join('.local', 'share', 'fnm'),
+    '.volta',
+    '.asdf',
+    path.join('.local', 'share', 'mise')
+  ].map((d) => path.join(os.homedir(), d)),
+  ...(process.platform === 'win32'
+    ? [path.join(appData, 'nvm'), path.join(appData, 'fnm'), path.join(localAppData, 'fnm_multishells'), path.join(localAppData, 'Volta')]
+    : [])
+].map((d) => d + path.sep);
 
 let problems = 0;
 
@@ -37,9 +48,9 @@ function bad(msg) {
 }
 
 /**
- * Reports one launcher (agent or menubar plugin): the Node it will run and any problem with it or the CLI.
+ * Reports one launcher (service or menubar plugin): the Node it will run and any problem with it or the CLI.
  * @param {string} label
- * @param {ReturnType<typeof inspectAgentPlist>} launcher
+ * @param {import('../service/index.js').ServiceInspection} launcher
  * @param {string} restartCommand command that regenerates the launcher with the current PATH
  */
 function reportLauncher(label, launcher, restartCommand) {
@@ -70,21 +81,27 @@ function reportLauncher(label, launcher, restartCommand) {
   }
 }
 
-function checkLaunchd() {
-  const agent = inspectAgentPlist();
-  if (!agent.installed) {
-    warn(`agent not installed: ${tildify(LAUNCH_AGENT_PLIST)} — run "updeps start"`);
-  } else if (agent.error) {
-    bad(`cannot read ${tildify(LAUNCH_AGENT_PLIST)}: ${agent.error} — run "updeps restart"`);
+function checkService() {
+  const backend = serviceBackend();
+  if (!backend.file) {
+    warn('no service manager found (no systemd user session): the daemon runs as a background process and is not started at login');
   } else {
-    reportLauncher('agent', agent, 'updeps restart');
-    if (agent.node && VERSION_MANAGER_DIRS.some((dir) => agent.node.startsWith(dir))) {
-      info(
-        'the daemon resolves "node" from the PATH saved at "updeps start"; after switching Node versions run "updeps restart"'
-      );
+    const agent = backend.inspect();
+    if (!agent.installed) {
+      warn(`${backend.label} not installed: ${tildify(backend.file)} — run "updeps start"`);
+    } else if (agent.error) {
+      bad(`cannot read ${tildify(backend.file)}: ${agent.error} — run "updeps restart"`);
+    } else {
+      reportLauncher(backend.label, agent, 'updeps restart');
+      if (agent.node && VERSION_MANAGER_DIRS.some((dir) => agent.node.startsWith(dir))) {
+        info(
+          'the daemon resolves "node" from the PATH saved at "updeps start"; after switching Node versions run "updeps restart"'
+        );
+      }
     }
   }
 
+  if (process.platform !== 'darwin') return;
   const plugin = inspectMenubarPlugin();
   if (plugin.installed) {
     if (plugin.problem || plugin.node) reportLauncher('menubar plugin', plugin, 'updeps menubar --install');
@@ -138,8 +155,9 @@ export function cmdDoctor() {
           'refs',
           wantRemote ? `remotes/origin/${branch}` : `heads/${branch}`
         );
-        if (fs.existsSync(reflog)) ok(`reflog exists: ${reflog.split('/.git/')[1]}`);
-        else warn(`no reflog (no events yet, possibly): ${reflog.split('/.git/')[1]}`);
+        const shown = path.relative(path.join(repo.path, '.git'), reflog).split(path.sep).join('/');
+        if (fs.existsSync(reflog)) ok(`reflog exists: ${shown}`);
+        else warn(`no reflog (no events yet, possibly): ${shown}`);
       }
     }
 
@@ -151,6 +169,7 @@ export function cmdDoctor() {
         const first = cmd.trim().split(/\s+/)[0];
         commandFirstTokens.add(first);
       }
+      if (pkg.shell) commandFirstTokens.add(pkg.shell);
     }
   }
 
@@ -174,7 +193,13 @@ export function cmdDoctor() {
 
   console.log('');
   console.log(styleText('bold', 'Notifications'));
-  if (commandExists('terminal-notifier')) ok('terminal-notifier');
+  if (process.platform === 'win32') {
+    if (commandExists('powershell.exe')) ok('PowerShell (Windows toast)');
+    else warn('powershell.exe not found — notifications are skipped silently');
+  } else if (process.platform !== 'darwin') {
+    if (commandExists('notify-send')) ok('notify-send');
+    else warn('notify-send not found (install libnotify) — notifications are skipped silently');
+  } else if (commandExists('terminal-notifier')) ok('terminal-notifier');
   else if (commandExists('osascript')) ok('osascript (fallback)');
   else warn('no notification tool found — notifications are skipped silently');
 
@@ -187,8 +212,8 @@ export function cmdDoctor() {
   } else warn('not running — run "updeps start"');
 
   console.log('');
-  console.log(styleText('bold', 'launchd'));
-  checkLaunchd();
+  console.log(styleText('bold', 'Service'));
+  checkService();
 
   console.log('');
   console.log(styleText('bold', 'Cycles'));

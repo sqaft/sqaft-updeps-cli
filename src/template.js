@@ -1,4 +1,4 @@
-import { shellQuote } from './exec.js';
+import { shellQuote, shellKind } from './exec.js';
 
 /**
  * @typedef {object} TemplateVars
@@ -12,6 +12,7 @@ import { shellQuote } from './exec.js';
  * @property {string} sourceBranch
  * @property {string} targetPath
  * @property {string} targetBranch
+ * @property {string|null} [shell]  the target's `shell` setting; decides how `{pkgs}` is quoted in commands
  */
 
 /**
@@ -26,7 +27,7 @@ function buildMap(vars) {
   const bumpSources = vars.sources && vars.sources.length ? vars.sources : [{ name: vars.pkg, sha: vars.sha }];
   return {
     pkg: vars.pkg || '',
-    pkgs: pkgs.map(shellQuote).join(' '),
+    pkgs: pkgs.map((p) => shellQuote(p, shellKind(vars.shell))).join(' '),
     sha: shortSha,
     bumps: bumpSources.map((s) => `${s.name || ''}@${(s.sha || '').slice(0, 7)}`).join(', '),
     sourcePath: vars.sourcePath || '',
@@ -38,7 +39,8 @@ function buildMap(vars) {
 
 /**
  * Interpolates {name} placeholders in a command string. Values that come from
- * config-derived data are already shell-quoted where relevant (pkgs).
+ * config-derived data are already shell-quoted where relevant (pkgs), for the
+ * shell the command runs in.
  * @param {string} template
  * @param {TemplateVars} vars
  * @returns {string}

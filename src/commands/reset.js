@@ -11,7 +11,8 @@ import {
 } from '../paths.js';
 import { resetState } from '../state.js';
 import { JOURNAL_FILE, JOURNAL_FILE_1 } from '../journal.js';
-import { runningDaemonPid, restartAgent } from '../daemon.js';
+import { runningDaemonPid } from '../daemon.js';
+import { restartService } from '../service/index.js';
 
 /**
  * Best-effort file removal. Never throws.
@@ -98,7 +99,7 @@ export async function cmdReset(opts = {}) {
   // 2. journal + its rotated file
   const wipedJournal = [JOURNAL_FILE, JOURNAL_FILE_1].map(rm).some(Boolean);
 
-  // 3. raw log — launchd keeps the file open, so truncate it instead of deleting
+  // 3. raw log — the service manager keeps the file open, so truncate it instead of deleting
   let wipedLog = false;
   try {
     if (fs.existsSync(LOG_FILE)) {
@@ -113,7 +114,7 @@ export async function cmdReset(opts = {}) {
   let daemonNote = '';
   if (pid && !keepDaemon) {
     try {
-      restartAgent(); // releaseHeldLocks() also releases the locks on shutdown
+      await restartService(); // releaseHeldLocks() also releases the locks on shutdown
       daemonNote = 'daemon restarted';
     } catch (err) {
       daemonNote = styleText('red', `failed to restart daemon: ${err.message}`);

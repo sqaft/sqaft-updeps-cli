@@ -36,6 +36,7 @@ export const DEFAULT_VALUES = {
   triggers: ['push'],
   branches: [],
   commands: ['npm update {pkgs} --no-audit --no-fund'],
+  shell: null, // null = the platform default: /bin/sh on macOS and Linux, cmd.exe on Windows
   commitMessage: 'chore(deps): bump {bumps}',
   commandTimeout: 300,
   debounceMs: 3000,
@@ -125,6 +126,7 @@ export function validateConfig(raw) {
     (d.triggers || []).forEach((t, i) => assertEnum(t, `defaults.triggers[${i}]`, VALID_TRIGGERS));
     assertStringArray(d.branches, 'defaults.branches');
     assertStringArray(d.commands, 'defaults.commands');
+    assertString(d.shell, 'defaults.shell');
     assertString(d.commitMessage, 'defaults.commitMessage');
     assertPositiveNumber(d.commandTimeout, 'defaults.commandTimeout');
     assertPositiveNumber(d.debounceMs, 'defaults.debounceMs', { allowZero: true });
@@ -164,6 +166,7 @@ export function validateConfig(raw) {
           );
           assertStringArray(pkg.branches, `${pp}.branches`);
           assertStringArray(pkg.commands, `${pp}.commands`);
+          assertString(pkg.shell, `${pp}.shell`);
           assertString(pkg.commitMessage, `${pp}.commitMessage`);
           assertPositiveNumber(pkg.commandTimeout, `${pp}.commandTimeout`);
           assertPositiveNumber(pkg.staleLockSec, `${pp}.staleLockSec`);
@@ -184,6 +187,7 @@ const KNOWN_DEFAULTS_KEYS = new Set([
   'triggers',
   'branches',
   'commands',
+  'shell',
   'commitMessage',
   'commandTimeout',
   'debounceMs',
@@ -202,6 +206,7 @@ const KNOWN_PACKAGE_KEYS = new Set([
   'triggers',
   'branches',
   'commands',
+  'shell',
   'commitMessage',
   'commandTimeout',
   'staleLockSec',
@@ -274,6 +279,7 @@ export function resolveConfig(raw) {
         triggers: pkg.triggers ? [...pkg.triggers] : repoTriggers ? [...repoTriggers] : [...defaults.triggers],
         branches: pkg.branches ? [...pkg.branches] : [...repoBranches],
         commands: pkg.commands ? [...pkg.commands] : [...defaults.commands],
+        shell: pkg.shell ?? defaults.shell ?? null,
         commitMessage: pkg.commitMessage ?? defaults.commitMessage,
         commandTimeout: pkg.commandTimeout ?? defaults.commandTimeout,
         staleLockSec: pkg.staleLockSec ?? defaults.staleLockSec,
