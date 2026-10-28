@@ -23,3 +23,6 @@ Under a temp `XDG_STATE_HOME` (`/private/var/folders/.../T/...`) the state direc
 
 ## 2026-10-28 — npm runs scripts through cmd.exe on Windows, which does not strip single quotes
 `node --test 'test/*.test.js'` passes the quotes through on Windows, so the glob matches nothing. Double quotes work in both `sh` and `cmd.exe`.
+
+## 2026-10-28 — On Windows `fs.realpathSync` keeps 8.3 short names, git does not
+`os.tmpdir()` on a GitHub Windows runner is `C:\Users\RUNNER~1\...`; `fs.realpathSync` keeps the short name while `git rev-parse --show-toplevel` and `fs.realpathSync.native` return `C:\Users\runneradmin\...`, so one repo showed up under two paths. Paths that are compared with git's use `fs.realpathSync.native` on Windows.

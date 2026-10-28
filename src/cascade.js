@@ -20,10 +20,15 @@ const SKIPPED_DIRS = new Set(['node_modules', 'vendor']);
 /** Extra time (beyond the debounce window) an idle daemon gets to pick up a push. */
 const PICKUP_GRACE_MS = 15_000;
 
-/** Real path when the path exists, otherwise its resolved form. */
+/**
+ * Real path when the path exists, otherwise its resolved form. On Windows the
+ * native call also expands 8.3 short names (`RUNNER~1`), as `git rev-parse`
+ * does, so the same repo always gets the same path.
+ */
+const realpath = process.platform === 'win32' ? fs.realpathSync.native : fs.realpathSync;
 function canon(p) {
   try {
-    return fs.realpathSync(p);
+    return realpath(p);
   } catch {
     return path.resolve(p);
   }

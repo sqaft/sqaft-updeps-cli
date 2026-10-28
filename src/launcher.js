@@ -36,13 +36,14 @@ export function launchPath(basePath = process.env.PATH, nodeDir = path.dirname(p
 }
 
 /**
- * Resolves symlinks; falls back to the input when the path cannot be resolved.
+ * Resolves symlinks (and on Windows 8.3 short names); falls back to the input
+ * when the path cannot be resolved.
  * @param {string} p
  * @returns {string}
  */
 function realPathOr(p) {
   try {
-    return fs.realpathSync(p);
+    return process.platform === 'win32' ? fs.realpathSync.native(p) : fs.realpathSync(p);
   } catch {
     return p;
   }

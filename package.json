@@ -36,8 +36,8 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "updeps": "./bin/updeps.js",
-    "sqaft-updeps": "./bin/updeps.js"
+    "updeps": "bin/updeps.js",
+    "sqaft-updeps": "bin/updeps.js"
   },
   "files": [
     "bin/",

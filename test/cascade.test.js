@@ -6,6 +6,9 @@ import { tmpDir, initGitRepo } from './helpers.js';
 import { resolveConfig } from '../src/config.js';
 import { buildGraph, pickPushable, planRounds, discoverRepos } from '../src/cascade.js';
 
+/** Path of a repo under /work, absolute on this platform (`D:\\work\\a` on Windows). */
+const p = (name) => path.resolve('/work', name);
+
 /** edges: [['a','b']] = a is a source, b a target. Repos live under /work. */
 function graphOf(edges) {
   const bySource = new Map();
@@ -14,14 +17,13 @@ function graphOf(edges) {
     bySource.get(s).push(t);
   }
   const repos = [...bySource].map(([s, targets]) => ({
-    path: `/work/${s}`,
+    path: p(s),
     name: s,
-    packages: targets.map((t) => ({ path: `/work/${t}`, name: t }))
+    packages: targets.map((t) => ({ path: p(t), name: t }))
   }));
   return buildGraph(resolveConfig({ repos }));
 }
 
-const p = (name) => `/work/${name}`;
 const names = (paths) => paths.map((x) => path.basename(x)).sort();
 
 test('pickPushable: only the topmost repo of a chain is pushed', () => {
@@ -92,7 +94,7 @@ test('planRounds: no rounds when there is nothing to push; stuck on a cycle', ()
 test('discoverRepos: outside a repo, finds only repos one level down and skips node_modules/vendor/dot directories', () => {
   const { dir, cleanup } = tmpDir('updeps-discover-');
   try {
-    const root = fs.realpathSync(dir);
+    const root = fs.realpathSync.native(dir);
     for (const rel of ['a', 'b', 'group/deep', 'node_modules', 'vendor', '.hidden', 'a/nested']) {
       initGitRepo(path.join(root, rel));
     }
@@ -108,7 +110,8 @@ test('discoverRepos: outside a repo, finds only repos one level down and skips n
 test('discoverRepos: inside a repo, returns that repo plus the repos one level below the current directory', () => {
   const { dir, cleanup } = tmpDir('updeps-discover-');
   try {
-    const ws = path.join(fs.realpathSync(dir), 'ws');
+    // the native call expands Windows 8.3 short names the way git does
+    const ws = path.join(fs.realpathSync.native(dir), 'ws');
     for (const rel of ['', 'a', 'b', 'group/deep', 'a/nested']) initGitRepo(path.join(ws, rel));
     fs.mkdirSync(path.join(ws, 'src'));
 
