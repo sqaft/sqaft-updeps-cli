@@ -212,7 +212,7 @@ function install() {
   if (process.platform !== 'darwin') {
     console.error(
       styleText('red', 'The menu bar plugin needs SwiftBar or xbar, which run on macOS only.') +
-        '\nOn Windows and Linux, the desktop app shows the same status in the system tray: npm install -g @sqaft/updeps-app'
+        '\nOn Windows and Linux, the desktop app shows the same status in the system tray: updeps gui'
     );
     process.exit(1);
   }

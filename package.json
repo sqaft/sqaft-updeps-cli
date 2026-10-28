@@ -1,6 +1,6 @@
 {
   "name": "@sqaft/updeps-cli",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Automatically update the repos that depend on a package whenever it is pushed: a language- and package-manager-agnostic CLI and background service for macOS, Linux and Windows.",
   "keywords": [
     "dependencies",

@@ -23,6 +23,7 @@ COMMANDS
   logs [-f] [-n N]                Raw log
   doctor                          System health check
   start | stop | restart          Control the background service (daemon)
+  gui [install | uninstall]       Desktop app: dependency graph editor + system tray
   menubar [--install]             SwiftBar/xbar plugin (macOS)
   reset [--yes] [--keep-daemon]   Delete all data except the config (queue + failures)
 
@@ -126,6 +127,8 @@ async function main() {
       return (await import('../src/commands/daemonctl.js')).cmdStop();
     case 'restart':
       return (await import('../src/commands/daemonctl.js')).cmdRestart();
+    case 'gui':
+      return (await import('../src/commands/gui.js')).cmdGui(positionals);
     case 'menubar':
       return (await import('../src/commands/menubar.js')).cmdMenubar(values);
     case 'reset':

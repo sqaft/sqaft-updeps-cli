@@ -47,7 +47,7 @@ Requires macOS, Linux or Windows, git, and Node.js 22+. This installs the
 `updeps` and `sqaft-updeps` commands.
 
 For a graphical view (dependency graph editor, status and failures in the system
-tray), see the desktop app [`@sqaft/updeps-app`](https://github.com/sqaft/sqaft-updeps-app).
+tray), run `updeps gui`; see "Desktop app".
 
 ---
 
@@ -346,6 +346,7 @@ the remote is ahead, the push is rejected and the command stops.
 | `updeps logs [-f] [-n N]` | Raw log |
 | `updeps doctor` | System health check |
 | `updeps start` · `stop` · `restart` | Background service control (see "Background service"). `stop` stops the daemon until the next login |
+| `updeps gui [install \| uninstall]` | Opens the desktop app (see "Desktop app"); `install` installs or updates it, `uninstall` removes it |
 | `updeps menubar [--install]` | SwiftBar / xbar menu bar plugin (macOS) |
 | `updeps reset [--yes] [--keep-daemon]` | Deletes all data **except** the config: queue, open failures, history (journal), raw logs, processed-SHA tracking, locks. If the daemon is running it is restarted to also clear the in-memory queue (skipped with `--keep-daemon`). `--yes` skips the confirmation. The **Maintenance › Clear data** button in the menu bar does the same. |
 
@@ -377,6 +378,28 @@ The daemon also listens on a local control channel (a Unix domain socket in the
 state directory, or in the temp directory when that path is too long for a socket
 name; a named pipe on Windows). `updeps stop` uses it to shut a
 supervised daemon down cleanly, since Windows has no signal a process can handle.
+
+---
+
+## Desktop app
+
+`updeps gui` opens the desktop app
+([`@sqaft/updeps-app`](https://github.com/sqaft/sqaft-updeps-app)): the
+dependency graph to view and edit, and the daemon's state, queue and open
+failures in the system tray (macOS, Linux, Windows). The first time, it offers
+to install the app; outside a terminal it only says how to install it.
+
+```bash
+updeps gui            # opens the app; offers to install it if it is missing
+updeps gui install    # installs or updates it
+updeps gui uninstall  # removes it
+```
+
+The app is installed with npm into its own directory,
+`~/.local/share/sqaft-updeps/app` (`%LOCALAPPDATA%\sqaft-updeps\app` on
+Windows; `XDG_DATA_HOME` is honored), so nothing is installed globally. It
+downloads Electron (about 100 MB). The app works with the CLI install that
+opened it, through the API below.
 
 ---
 
@@ -512,6 +535,9 @@ npm install
 npm link            # installs the updeps and sqaft-updeps commands
 npm test            # node:test, no extra dependencies
 ```
+
+`UPDEPS_APP=<path to a sqaft-updeps-app checkout> updeps gui` opens that checkout
+instead of the installed desktop app.
 
 CI runs the tests on macOS, Linux and Windows. Publishing happens from CI: when
 the `version` in `package.json` is not on npm yet, the `publish` job in

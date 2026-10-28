@@ -12,6 +12,7 @@ The desktop app (dependency graph editor + system tray) lives in the `sqaft-upde
 - `src/service/`: how the daemon is kept running per platform: `launchd.js` (macOS), `systemd.js` (Linux), `startup.js` (Windows Startup-folder script), `supervised.js` (the `updeps daemon --supervise` supervisor used on Windows and on Linux without systemd); `index.js` picks one.
 - `src/control.js`: the daemon's control channel (Unix socket / named pipe), used to stop a supervised daemon.
 - `src/launcher.js`: Node/CLI lookup shared by the service definitions and the menubar plugin.
+- `src/commands/gui.js`: `updeps gui`; installs `@sqaft/updeps-app` with npm into `DESKTOP_APP_DIR` (`src/paths.js`) and runs its `bin/updeps-app.js` with `UPDEPS_CLI` set to this package.
 
 ## Commands
 

@@ -34,14 +34,18 @@ export function tildify(absPath) {
 const homeDir = os.homedir();
 const isWindows = process.platform === 'win32';
 
-// XDG base directories when set; otherwise ~/.config and ~/.local/state on
-// macOS and Linux, %APPDATA% and %LOCALAPPDATA% on Windows.
+// XDG base directories when set; otherwise ~/.config, ~/.local/state and
+// ~/.local/share on macOS and Linux, %APPDATA% and %LOCALAPPDATA% on Windows.
 const configBase =
   process.env.XDG_CONFIG_HOME ||
   (isWindows ? process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming') : path.join(homeDir, '.config'));
 const stateBase =
   process.env.XDG_STATE_HOME ||
   (isWindows ? process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local') : path.join(homeDir, '.local', 'state'));
+
+const dataBase =
+  process.env.XDG_DATA_HOME ||
+  (isWindows ? process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local') : path.join(homeDir, '.local', 'share'));
 
 export const APP_ID = 'sqaft-updeps';
 
@@ -55,6 +59,9 @@ export const LOGS_DIR = path.join(STATE_DIR, 'logs');
 export const LOG_FILE = path.join(LOGS_DIR, 'updeps.log');
 export const PID_FILE = path.join(STATE_DIR, 'daemon.pid');
 export const SUPERVISOR_PID_FILE = path.join(STATE_DIR, 'supervisor.pid');
+
+/** Where `updeps gui install` installs the desktop app (an npm prefix of its own). */
+export const DESKTOP_APP_DIR = path.join(dataBase, APP_ID, 'app');
 
 /** Short, stable id of this state directory, so separate installs/test runs never share a socket name. */
 const stateDirId = crypto.createHash('sha256').update(STATE_DIR).digest('hex').slice(0, 12);
