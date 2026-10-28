@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpDir, TEST_SHELL } from './helpers.js';
 
 const { dir: root, cleanup } = tmpDir('updeps-push-e2e-');
-const dir = fs.realpathSync(root);
+const dir = fs.realpathSync.native(root);
 process.env.XDG_STATE_HOME = path.join(dir, 'state');
 process.env.XDG_CONFIG_HOME = path.join(dir, 'config');
 

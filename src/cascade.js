@@ -383,7 +383,7 @@ async function commitChanges(repos, graph, message, log) {
  * `failed` when the daemon reports failed targets (the run stops there).
  * @param {object} params
  * @param {ReturnType<import('./config.js').resolveConfig>} params.config
- * @param {string[]} params.repos      real paths in scope (see `discoverRepos`)
+ * @param {string[]} params.repos      repos in scope (see `discoverRepos`); compared by their real path
  * @param {() => boolean} params.isDaemonAlive
  * @param {number} [params.pollMs=1000]
  * @param {(line: string) => void} [params.log]
@@ -402,6 +402,7 @@ export async function runCascade({
   maxRounds = 50,
   commitMessage
 }) {
+  repos = repos.map(canon);
   const graph = buildGraph(config);
   const watchList = buildWatchList(config);
   const idleTimeoutMs = (config.defaults.debounceMs ?? 3000) + PICKUP_GRACE_MS;
