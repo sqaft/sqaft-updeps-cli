@@ -89,32 +89,35 @@ test('planRounds: push edilecek şey yoksa tur yok; döngüde stuck', () => {
   assert.deepEqual(names(rounds[0].stuck), ['a', 'b']);
 });
 
-test('discoverRepos: alt dizindeki repoları bulur, node_modules/dot/iç içe repoları atlar', () => {
+test('discoverRepos: repo olmayan dizinde yalnızca bir alt seviyedeki repoları bulur, node_modules/vendor/dot dizinlerini atlar', () => {
   const { dir, cleanup } = tmpDir('updeps-discover-');
   try {
     const root = fs.realpathSync(dir);
-    for (const rel of ['a', 'group/b', 'node_modules/x', '.hidden/y', 'a/nested']) {
-      if (rel === 'a/nested') continue; // a oluşturulduktan sonra
+    for (const rel of ['a', 'b', 'group/deep', 'node_modules', 'vendor', '.hidden', 'a/nested']) {
       initGitRepo(path.join(root, rel));
     }
-    initGitRepo(path.join(root, 'a', 'nested'));
     fs.mkdirSync(path.join(root, 'empty'));
 
-    assert.deepEqual(discoverRepos(root), [path.join(root, 'a'), path.join(root, 'group', 'b')]);
+    assert.deepEqual(discoverRepos(root), [path.join(root, 'a'), path.join(root, 'b')]);
+    assert.deepEqual(discoverRepos(path.join(root, 'empty')), []);
   } finally {
     cleanup();
   }
 });
 
-test('discoverRepos: repo içinde (alt dizin dahil) yalnızca o repo döner', () => {
+test('discoverRepos: repo içinde o repo ve bulunulan dizinin bir alt seviyesindeki repolar döner', () => {
   const { dir, cleanup } = tmpDir('updeps-discover-');
   try {
-    const root = fs.realpathSync(dir);
-    initGitRepo(path.join(root, 'a'));
-    fs.mkdirSync(path.join(root, 'a', 'src'));
-    initGitRepo(path.join(root, 'a', 'nested'));
-    assert.deepEqual(discoverRepos(path.join(root, 'a')), [path.join(root, 'a')]);
-    assert.deepEqual(discoverRepos(path.join(root, 'a', 'src')), [path.join(root, 'a')]);
+    const ws = path.join(fs.realpathSync(dir), 'ws');
+    for (const rel of ['', 'a', 'b', 'group/deep', 'a/nested']) initGitRepo(path.join(ws, rel));
+    fs.mkdirSync(path.join(ws, 'src'));
+
+    // workspace reposu + içindeki proje repoları
+    assert.deepEqual(discoverRepos(ws), [ws, path.join(ws, 'a'), path.join(ws, 'b')]);
+    // repo alt dizini: kapsayan repo (+ o dizinin hemen altındaki repolar; burada yok)
+    assert.deepEqual(discoverRepos(path.join(ws, 'src')), [ws]);
+    // iç içe repo: üstteki workspace kapsama girmez
+    assert.deepEqual(discoverRepos(path.join(ws, 'a')), [path.join(ws, 'a'), path.join(ws, 'a', 'nested')]);
   } finally {
     cleanup();
   }

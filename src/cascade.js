@@ -17,7 +17,6 @@ import { readEvents } from './journal.js';
 import { redact } from './redact.js';
 
 const SKIPPED_DIRS = new Set(['node_modules', 'vendor']);
-const MAX_SCAN_DEPTH = 4;
 /** Extra time (beyond the debounce window) an idle daemon gets to pick up a push. */
 const PICKUP_GRACE_MS = 15_000;
 
@@ -35,34 +34,31 @@ function hasGitDir(dir) {
 }
 
 /**
- * Git repos in scope for a cascade run. Inside a repo (any subdirectory) that
- * is just the repo itself; otherwise every repo found below `cwd`. The scan
- * does not descend into a repo it finds, nor into `node_modules`, `vendor` or
- * dot-directories. Paths are real paths.
+ * Git repos in scope for a cascade run: the repo `cwd` is in (`cwd` may be any
+ * subdirectory of it) plus every repo directly below `cwd`, one level deep
+ * (`node_modules`, `vendor` and dot-directories are skipped). Either part may
+ * be empty, so a workspace repo that holds project repos covers them all.
+ * Paths are real paths.
  * @param {string} cwd
  * @returns {string[]}
  */
 export function discoverRepos(cwd) {
-  const top = git(['rev-parse', '--show-toplevel'], cwd, '');
-  if (top) return [canon(top)];
-
+  const dir = canon(cwd);
   const found = [];
-  const walk = (dir, depth) => {
-    if (depth > MAX_SCAN_DEPTH) return;
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith('.') || SKIPPED_DIRS.has(entry.name)) continue;
-      const full = path.join(dir, entry.name);
-      if (hasGitDir(full)) found.push(canon(full));
-      else walk(full, depth + 1);
-    }
-  };
-  walk(canon(cwd), 1);
+  const top = git(['rev-parse', '--show-toplevel'], dir, '');
+  if (top) found.push(canon(top));
+
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    // unreadable directory: only the enclosing repo (if any) is in scope
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.') || SKIPPED_DIRS.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    if (hasGitDir(full)) found.push(canon(full));
+  }
   return found.sort();
 }
 

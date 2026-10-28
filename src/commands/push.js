@@ -48,8 +48,9 @@ function printPlan(infos, graph) {
 }
 
 /**
- * `updeps push`: pushes the unpushed commits of the repos under the current
- * directory in dependency order, waiting for the daemon between rounds.
+ * `updeps push`: pushes the unpushed commits of the repos in scope of the
+ * current directory (the enclosing repo and the repos directly below it, see
+ * `discoverRepos`) in dependency order, waiting for the daemon between rounds.
  * With `--commit`, every pushable repo with pending changes is committed with
  * that message first.
  * @param {{ 'dry-run'?: boolean, commit?: string }} opts
@@ -60,7 +61,7 @@ export async function cmdPush(opts = {}) {
 
   const config = loadConfig();
   const repos = discoverRepos(process.cwd());
-  if (repos.length === 0) fail('Bu dizinde ve altında git reposu bulunamadı.');
+  if (repos.length === 0) fail('Bu dizin bir git reposunda değil ve hemen altında git reposu yok.');
 
   const graph = buildGraph(config);
 
