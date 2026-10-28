@@ -41,7 +41,7 @@
     "examples/"
   ],
   "scripts": {
-    "test": "node --test --test-force-exit 'test/*.test.js'",
+    "test": "node --test --test-force-exit --import ./test/setup.js 'test/*.test.js'",
     "start": "node bin/updeps.js daemon",
     "prepublishOnly": "npm test"
   },

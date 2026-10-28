@@ -7,7 +7,7 @@ A language- and package-manager-agnostic macOS CLI and background service (launc
 
 ## Commands
 
-- `npm test` — `node --test --test-force-exit 'test/*.test.js'`
+- `npm test` — `node --test --test-force-exit --import ./test/setup.js 'test/*.test.js'` (`test/setup.js` points XDG_CONFIG_HOME / XDG_STATE_HOME at a temp dir so tests never touch the real config/state)
 - `npm start` — runs the daemon in the foreground
 
 ## Releases
