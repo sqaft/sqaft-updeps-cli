@@ -398,8 +398,9 @@ updeps gui uninstall  # removes it
 The app is installed with npm into its own directory,
 `~/.local/share/sqaft-updeps/app` (`%LOCALAPPDATA%\sqaft-updeps\app` on
 Windows; `XDG_DATA_HOME` is honored), so nothing is installed globally. It
-downloads Electron during the install (about 100 MB, 350 MB on disk). The app
-works with the CLI install that opened it, through the API below.
+downloads Electron during the install (about 100 MB, 350 MB on disk), and on
+macOS prepares the app to show up as "updeps" in the Dock. The app works with
+the CLI install that opened it, through the API below.
 
 ---
 

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { createInterface } from 'node:readline/promises';
 import { styleText } from 'node:util';
 import { DESKTOP_APP_DIR, tildify } from '../paths.js';
@@ -56,25 +55,20 @@ export function installApp() {
   if (res.status !== 0) throw new Error(`npm install ${APP_PACKAGE} failed (exit code ${res.status}).`);
   const app = findApp();
   if (!app) throw new Error(`npm finished, but ${APP_PACKAGE} is not in ${tildify(DESKTOP_APP_DIR)}.`);
-  downloadElectron(app);
+  prepareApp(app);
   return app;
 }
 
 /**
- * Electron downloads its binary the first time it is required, not when npm
- * installs it. Requiring it here makes that download part of the install, so
- * the first `updeps gui` opens right away and a failed download shows up now.
- * @param {{ root: string }} app
+ * Runs the app's own setup (`updeps-app --prepare`): Electron downloads its
+ * binary the first time it is required, not when npm installs it, and on
+ * macOS the app builds its updeps.app bundle. Doing that during the install
+ * makes the first `updeps gui` open right away and reports a failure now.
+ * @param {{ bin: string }} app
  */
-function downloadElectron(app) {
-  let entry;
-  try {
-    entry = createRequire(path.join(app.root, 'package.json')).resolve('electron');
-  } catch {
-    return; // an app version without Electron as a dependency
-  }
-  const res = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(entry)})`], { stdio: 'inherit' });
-  if (res.status !== 0) throw new Error('Downloading Electron failed. Run "updeps gui install" again.');
+function prepareApp(app) {
+  const res = spawnSync(process.execPath, [app.bin, '--prepare'], { stdio: 'inherit' });
+  if (res.error || res.status !== 0) throw new Error('Preparing the desktop app failed. Run "updeps gui install" again.');
 }
 
 /**
