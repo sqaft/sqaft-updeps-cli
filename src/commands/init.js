@@ -38,8 +38,8 @@ const STARTER = {
 export function cmdInit(opts = {}) {
   if (fs.existsSync(CONFIG_FILE) && !opts.force) {
     console.error(
-      styleText('yellow', `Zaten var: ${tildify(CONFIG_FILE)}\n`) +
-        'Üzerine yazmak için: updeps init --force'
+      styleText('yellow', `Already exists: ${tildify(CONFIG_FILE)}\n`) +
+        'To overwrite: updeps init --force'
     );
     process.exit(1);
   }
@@ -52,6 +52,6 @@ export function cmdInit(opts = {}) {
   fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
   fs.writeFileSync(CONFIG_FILE, content, 'utf8');
 
-  console.log(styleText('green', `Oluşturuldu: ${tildify(CONFIG_FILE)}`));
-  console.log('Düzenledikten sonra doğrulamak için: updeps doctor');
+  console.log(styleText('green', `Created: ${tildify(CONFIG_FILE)}`));
+  console.log('After editing, verify with: updeps doctor');
 }

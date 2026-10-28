@@ -155,7 +155,7 @@ export function inspectRepo(repoPath, graph) {
   const pre = checkPreconditions(repoPath);
   if (!pre.ok) return { path: repoPath, label, skip: pre.reason };
   const up = upstreamStatus(repoPath);
-  if (!up) return { path: repoPath, label, skip: 'upstream yok veya HEAD detached' };
+  if (!up) return { path: repoPath, label, skip: 'no upstream, or HEAD is detached' };
   const source = graph.sources.get(repoPath);
   return { path: repoPath, label, ...up, watched: Boolean(source) && watchesPush(source, up.remote, up.remoteBranch) };
 }
@@ -250,7 +250,7 @@ function pendingPushes(watchList, snapshot) {
 }
 
 function formatMs(ms) {
-  return `${Math.round(ms / 1000)}sn`;
+  return `${Math.round(ms / 1000)}s`;
 }
 
 /**
@@ -267,7 +267,7 @@ async function waitForDaemon({ watchList, snapshot, isDaemonAlive, pollMs, idleT
   let lastPendingKey = null;
 
   for (;;) {
-    if (!isDaemonAlive()) throw new Error('Daemon çalışmıyor. "updeps start" ile başlat, sonra komutu tekrar çalıştır.');
+    if (!isDaemonAlive()) throw new Error('The daemon is not running. Start it with "updeps start", then run the command again.');
 
     const state = loadState();
     const pushes = pendingPushes(watchList, snapshot);
@@ -287,19 +287,19 @@ async function waitForDaemon({ watchList, snapshot, isDaemonAlive, pollMs, idleT
       lastPendingKey = pendingKey;
     } else if (unprocessed.length > 0 && Date.now() - idleSince > idleTimeoutMs) {
       throw new Error(
-        `Daemon boşta ama push'lar işlenmedi (${unprocessed.map((p) => p.name).join(', ')}). ` +
-          'Daemon bu repoyu/branch\'i izlemiyor olabilir; "updeps doctor" ve "updeps logs" ile kontrol et.'
+        `The daemon is idle but the pushes were not processed (${unprocessed.map((p) => p.name).join(', ')}). ` +
+          'It may not be watching this repo or branch; check with "updeps doctor" and "updeps logs".'
       );
     }
 
     const run = state.activeRun;
-    const queued = state.queue.pending > 0 ? ` (+${state.queue.pending} kuyrukta)` : '';
+    const queued = state.queue.pending > 0 ? ` (+${state.queue.pending} queued)` : '';
     progress(
       run
-        ? `daemon çalışıyor: ${run.source} → ${run.target} ${formatMs(Date.now() - run.startedAt)}${queued}`
+        ? `daemon running: ${run.source} → ${run.target} ${formatMs(Date.now() - run.startedAt)}${queued}`
         : unprocessed.length > 0
-          ? `daemon bekleniyor: ${unprocessed.map((p) => p.name).join(', ')} ${formatMs(Date.now() - startedAt)}${queued}`
-          : `tamamlanıyor${queued}`
+          ? `waiting for daemon: ${unprocessed.map((p) => p.name).join(', ')} ${formatMs(Date.now() - startedAt)}${queued}`
+          : `finishing${queued}`
     );
     await sleep(pollMs);
   }
@@ -353,13 +353,13 @@ async function commitChanges(repos, graph, message, log) {
     try {
       const snapshot = statusSnapshot(info.path);
       if (snapshot.size === 0) continue; // changed while waiting for the lock
-      if (hasUnmerged(snapshot)) throw new Error('çözülmemiş merge çakışması var');
+      if (hasUnmerged(snapshot)) throw new Error('unresolved merge conflicts');
       const sha = commitAll(info.path, message);
       committed.push({ label: info.label, path: info.path, files: snapshot.size, sha });
-      log(`Commit: ${info.label} (${snapshot.size} dosya) ${sha}`);
+      log(`Commit: ${info.label} (${snapshot.size} ${snapshot.size === 1 ? 'file' : 'files'}) ${sha}`);
     } catch (err) {
-      const done = committed.length > 0 ? ` (önce commit'lenenler: ${committed.map((c) => c.label).join(', ')})` : '';
-      throw new Error(`[${info.label}] commit atılamadı, hiçbir şey push edilmedi${done}: ${redact(err.message)}`);
+      const done = committed.length > 0 ? ` (already committed: ${committed.map((c) => c.label).join(', ')})` : '';
+      throw new Error(`[${info.label}] commit failed, nothing was pushed${done}: ${redact(err.message)}`);
     } finally {
       lock.release();
     }
@@ -423,7 +423,7 @@ export async function runCascade({
     ).map((p) => ahead.find((i) => i.path === p));
     if (frontier.length === 0) {
       throw new Error(
-        `Push sırası belirlenemedi (bağımlılık döngüsü?): ${ahead.map((i) => i.label).join(', ')}`
+        `Cannot determine push order (dependency cycle?): ${ahead.map((i) => i.label).join(', ')}`
       );
     }
 
@@ -431,14 +431,14 @@ export async function runCascade({
     const roundStart = Date.now();
     const pushed = [];
     for (const info of frontier) {
-      log(`Tur ${n}: push → ${info.label} (${info.branch}, ${info.ahead} commit)`);
+      log(`Round ${n}: push → ${info.label} (${info.branch}, ${info.ahead} ${info.ahead === 1 ? 'commit' : 'commits'})`);
       try {
         gitOrThrow(['push', info.remote, `HEAD:refs/heads/${info.remoteBranch}`], info.path);
       } catch (err) {
         throw new Error(`[${info.label}] ${redact(err.message)}`);
       }
       if ((upstreamStatus(info.path)?.ahead ?? 0) > 0) {
-        throw new Error(`[${info.label}] push sonrası hâlâ gönderilmemiş commit görünüyor (remote ayarını kontrol et).`);
+        throw new Error(`[${info.label}] unpushed commits remain after the push (check the remote configuration).`);
       }
       pushed.push({ label: info.label, path: info.path, branch: info.branch, commits: info.ahead });
     }
@@ -454,8 +454,8 @@ export async function runCascade({
     const failed = results.filter((x) => x.status === 'failed');
     for (const r of failed) log(`  ✗ ${r.target} ← ${r.source}: ${r.message}`);
     const count = (s) => results.filter((x) => x.status === s).length;
-    log(`  daemon: ${count('committed')} commit, ${count('unchanged')} güncel, ${failed.length} hata, ${count('skipped')} atlandı`);
+    log(`  daemon: ${count('committed')} committed, ${count('unchanged')} up to date, ${failed.length} failed, ${count('skipped')} skipped`);
     if (failed.length > 0) return { rounds, failed, skipped, committed };
   }
-  throw new Error(`${maxRounds} turda tamamlanamadı, durduruldu.`);
+  throw new Error(`Did not finish within ${maxRounds} rounds, stopped.`);
 }

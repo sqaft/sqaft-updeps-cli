@@ -13,29 +13,29 @@ const base = {
   targetBranch: 'main'
 };
 
-test('komutta {pkgs} çoklu paket, scoped adlar', () => {
+test('{pkgs} in a command: multiple packages, scoped names', () => {
   const out = interpolateCommand('yarn upgrade {pkgs}', base);
   assert.equal(out, 'yarn upgrade @acme/api @acme/sdk');
 });
 
-test('boşluk içeren paket adı shell-quote edilir', () => {
+test('a package name containing a space is shell-quoted', () => {
   const out = interpolateCommand('npm update {pkgs}', { ...base, pkgList: ['weird name'] });
   assert.equal(out, "npm update 'weird name'");
 });
 
-test('{sha} 7 haneye kısaltılır, {bumps} birleşik', () => {
+test('{sha} is shortened to 7 characters, {bumps} is combined', () => {
   assert.equal(interpolateCommand('echo {sha}', base), 'echo abcdef1');
   assert.equal(interpolateMessage('bump {bumps}', base), 'bump @acme/api@abcdef1');
 });
 
-test('commit mesajında {pkgs} tırnak yok, virgüllü', () => {
+test('{pkgs} in a commit message is unquoted and comma-separated', () => {
   assert.equal(
     interpolateMessage('package updated {pkgs}', base),
     'package updated @acme/api, @acme/sdk'
   );
 });
 
-test('{bumps} çoklu kaynak (coalesce edilmiş iş) listesi', () => {
+test('{bumps} lists multiple sources (a coalesced job)', () => {
   const multi = {
     ...base,
     sources: [
@@ -53,11 +53,11 @@ test('{bumps} çoklu kaynak (coalesce edilmiş iş) listesi', () => {
   );
 });
 
-test('bilinmeyen placeholder korunur', () => {
+test('an unknown placeholder is preserved', () => {
   assert.equal(interpolateCommand('x {unknown} y', base), 'x {unknown} y');
 });
 
-test('shellQuote temel davranış', () => {
+test('shellQuote basic behavior', () => {
   assert.equal(shellQuote('@scope/pkg'), '@scope/pkg');
   assert.equal(shellQuote("a'b"), `'a'\\''b'`);
   assert.equal(shellQuote(''), "''");

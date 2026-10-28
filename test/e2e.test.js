@@ -23,7 +23,7 @@ function g(args, cwd) {
   return r.stdout.trim();
 }
 
-test('push → dependent hedefte yalnızca lock dosyası commit\'lenir', async () => {
+test('push → only the lock file is committed in the dependent target', async () => {
   const remote = path.join(dir, 'remote.git');
   const source = path.join(dir, 'source');
   const target = path.join(dir, 'target');
@@ -105,7 +105,7 @@ test('push → dependent hedefte yalnızca lock dosyası commit\'lenir', async (
   assert.match(fs.readFileSync(path.join(target, 'yarn.lock'), 'utf8'), /source=new my-source/);
 });
 
-test('önceden kirli hedef dosyasındaki güncelleme sessizce kaybolmaz', async () => {
+test('an update to an already-dirty target file is not silently lost', async () => {
   const source = path.join(dir, 'dirty-source');
   const target = path.join(dir, 'dirty-target');
 
@@ -130,7 +130,7 @@ test('önceden kirli hedef dosyasındaki güncelleme sessizce kaybolmaz', async 
   g(['add', '-A'], target);
   g(['commit', '-qm', 'init'], target);
 
-  // kullanıcı yarn.lock üzerinde zaten çalışıyor (kirli) — komut da onu değiştirecek
+  // the user is already working on yarn.lock (dirty) — the command will modify it too
   fs.writeFileSync(path.join(target, 'yarn.lock'), 'v2-WIP\n');
 
   const config = resolveConfig({
@@ -151,10 +151,10 @@ test('önceden kirli hedef dosyasındaki güncelleme sessizce kaybolmaz', async 
     trigger: { trigger: 'manual', sourceName: 'src', sourcePath: source }
   });
 
-  // ne "unchanged" (güncelleme sessizce kaybolmuş gibi görünmemeli) ne "failed"
+  // neither "unchanged" (the update must not look silently lost) nor "failed"
   assert.equal(result.status, 'skipped');
-  assert.match(result.message, /önceden kirli/);
-  // kullanıcının + komutun üst üste bindiği hâl korunur, geri alınmaz/commit'lenmez
+  assert.match(result.message, /already-dirty/);
+  // the combined user + command state is kept: neither reverted nor committed
   assert.equal(fs.readFileSync(path.join(target, 'yarn.lock'), 'utf8'), 'v3\n');
-  assert.equal(g(['status', '--porcelain'], target).trim() !== '', true); // hâlâ kirli, commit atılmadı
+  assert.equal(g(['status', '--porcelain'], target).trim() !== '', true); // still dirty, nothing committed
 });

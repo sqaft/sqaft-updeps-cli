@@ -5,7 +5,7 @@ import { DEFAULT_COMMIT_PATHS } from '../src/config.js';
 
 const matches = (pattern, p) => compileGlob(pattern).test(p);
 
-test('/ içermeyen desen her derinlikteki dosya adıyla eşleşir', () => {
+test('a pattern without / matches the file name at any depth', () => {
   assert.ok(matches('yarn.lock', 'yarn.lock'));
   assert.ok(matches('yarn.lock', 'packages/web/yarn.lock'));
   assert.ok(!matches('yarn.lock', 'yarn.lock.bak'));
@@ -13,7 +13,7 @@ test('/ içermeyen desen her derinlikteki dosya adıyla eşleşir', () => {
   assert.ok(matches('*.lock', 'a/b/c.lock'));
 });
 
-test('/ içeren ya da / ile başlayan desen repo köküne sabitlenir', () => {
+test('a pattern containing or starting with / is anchored to the repo root', () => {
   assert.ok(matches('/package.json', 'package.json'));
   assert.ok(!matches('/package.json', 'apps/web/package.json'));
   assert.ok(matches('apps/*/package.json', 'apps/web/package.json'));
@@ -21,14 +21,14 @@ test('/ içeren ya da / ile başlayan desen repo köküne sabitlenir', () => {
   assert.ok(!matches('apps/*/package.json', 'apps/web/sub/package.json'));
 });
 
-test('* ve ? / karakterini geçmez', () => {
+test('* and ? do not cross /', () => {
   assert.ok(matches('src/*.js', 'src/a.js'));
   assert.ok(!matches('src/*.js', 'src/lib/a.js'));
   assert.ok(matches('src/?.js', 'src/a.js'));
   assert.ok(!matches('src/?.js', 'src/ab.js'));
 });
 
-test('** sıfır veya daha fazla dizinle eşleşir', () => {
+test('** matches zero or more directories', () => {
   assert.ok(matches('gen/**/*.json', 'gen/a.json'));
   assert.ok(matches('gen/**/*.json', 'gen/x/y/a.json'));
   assert.ok(!matches('gen/**/*.json', 'other/gen/a.json'));
@@ -37,31 +37,31 @@ test('** sıfır veya daha fazla dizinle eşleşir', () => {
   assert.ok(matches('**', 'any/path/at/all.txt'));
 });
 
-test('/ ile biten desen o dizinin altındaki her şeyle eşleşir', () => {
+test('a pattern ending in / matches everything below that directory', () => {
   assert.ok(matches('generated/', 'generated/a.txt'));
   assert.ok(matches('generated/', 'pkg/generated/a/b.txt'));
   assert.ok(!matches('generated/', 'generated.txt'));
 });
 
-test('{a,b} seçenekleri ve regex özel karakterleri', () => {
+test('{a,b} alternatives and regex special characters', () => {
   assert.ok(matches('{yarn,Cargo}.lock', 'yarn.lock'));
   assert.ok(matches('{yarn,Cargo}.lock', 'crates/x/Cargo.lock'));
   assert.ok(!matches('{yarn,Cargo}.lock', 'bun.lock'));
-  assert.ok(!matches('a.b', 'axb')); // . harfiyen
+  assert.ok(!matches('a.b', 'axb')); // . is literal
   assert.ok(matches('f(1)+[x].txt', 'f(1)+[x].txt'));
 });
 
-test('geçersiz desenler hata fırlatır', () => {
-  assert.throws(() => compileGlob(''), /boş/);
-  assert.throws(() => compileGlob('   '), /boş/);
-  assert.throws(() => compileGlob('/'), /yalnızca/);
-  assert.throws(() => compileGlob('!yarn.lock'), /olumsuzlama/);
-  assert.throws(() => compileGlob('{a,b'), /kapanmayan/);
-  assert.throws(() => compileGlob('a}'), /eşi olmayan/);
-  assert.throws(() => compileGlob('{a,{b,c}}'), /iç içe/);
+test('invalid patterns throw', () => {
+  assert.throws(() => compileGlob(''), /empty/);
+  assert.throws(() => compileGlob('   '), /empty/);
+  assert.throws(() => compileGlob('/'), /just/);
+  assert.throws(() => compileGlob('!yarn.lock'), /negation/);
+  assert.throws(() => compileGlob('{a,b'), /unclosed/);
+  assert.throws(() => compileGlob('a}'), /unmatched/);
+  assert.throws(() => compileGlob('{a,{b,c}}'), /nested/);
 });
 
-test('varsayılan commitPaths kilit dosyaları ve manifestlerle eşleşir, kaynak dosyalarla eşleşmez', () => {
+test('the default commitPaths match lockfiles and manifests, not source files', () => {
   const isCommitPath = createPathMatcher(DEFAULT_COMMIT_PATHS);
   for (const p of [
     'package.json',

@@ -5,14 +5,14 @@ import { derivePackageNames } from '../graph.js';
 export function cmdList() {
   const config = loadConfig();
   if (config.repos.length === 0) {
-    console.log('Config boş — henüz kaynak repo tanımlı değil.');
+    console.log('Config is empty — no source repos defined yet.');
     return;
   }
 
   for (const repo of config.repos) {
     console.log(styleText('bold', repo.name) + styleText('dim', `  ${repo.rawPath}`));
     if (repo.packages.length === 0) {
-      console.log(styleText('dim', '  (bağımlı paket yok)'));
+      console.log(styleText('dim', '  (no dependent packages)'));
     }
     for (const pkg of repo.packages) {
       const flags = [
@@ -26,7 +26,7 @@ export function cmdList() {
     console.log('');
   }
 
-  console.log(styleText('dim', 'Her hedefin güncelleme komutuna geçecek paket listesi ({pkgs}):'));
+  console.log(styleText('dim', 'Package list passed to each target\'s update command ({pkgs}):'));
   const seen = new Set();
   for (const repo of config.repos) {
     for (const pkg of repo.packages) {

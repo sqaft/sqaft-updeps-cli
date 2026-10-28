@@ -64,10 +64,10 @@ function errId(source, target) {
 export function rejectReason(target, trigger) {
   if (trigger.trigger === 'manual') return null;
   if (!target.triggers.includes(trigger.trigger)) {
-    return `tetikleyici '${trigger.trigger}' bu hedef için kapalı`;
+    return `trigger '${trigger.trigger}' is disabled for this target`;
   }
   if (target.branches.length > 0 && trigger.branch && !target.branches.includes(trigger.branch)) {
-    return `branch '${trigger.branch}' bu hedef için listede değil`;
+    return `branch '${trigger.branch}' is not in this target's branch list`;
   }
   return null;
 }
@@ -161,7 +161,7 @@ export function recordTargetResult({ target, trigger, group, status, rawMessage,
  */
 function otherFilesWarning(label, otherFiles) {
   if (otherFiles.length === 0) return [];
-  const msg = `commitPaths dışında değişen dosyalara dokunulmadı: ${otherFiles.join(', ')}`;
+  const msg = `files changed outside commitPaths were left untouched: ${otherFiles.join(', ')}`;
   logger.warn(`[${label}] ${msg}`);
   return [msg];
 }
@@ -208,7 +208,7 @@ function foldPreviousCommits(target, vars) {
     if (!sha) return null;
     return { sha, message, sources, replaced: [...chain.commits.map((c) => c.sha), newSha] };
   } catch (err) {
-    logger.warn(`[${target.name}] önceki commit'ler birleştirilemedi, ayrı commit olarak bırakıldı: ${err.message}`);
+    logger.warn(`[${target.name}] could not squash earlier commits, left them as separate commits: ${err.message}`);
     return null;
   }
 }
@@ -270,7 +270,7 @@ export async function runTarget({
   const reason = rejectReason(target, trigger);
   if (reason) return emit('skipped', reason);
 
-  if (signal?.aborted) return emit('failed', 'daemon kapatıldı, başlamadan iptal edildi');
+  if (signal?.aborted) return emit('failed', 'daemon shut down, aborted before start');
 
   let lock;
   try {
@@ -307,7 +307,7 @@ export async function runTarget({
 
     const before = statusSnapshot(target.path);
     if (target.dirtyPolicy === 'skip' && before.size > 0) {
-      return emit('skipped', 'working tree kirli (dirtyPolicy: skip)');
+      return emit('skipped', 'dirty working tree (dirtyPolicy: skip)');
     }
 
     // Only files matching `commitPaths` (lockfiles, manifests) are treated as
@@ -335,7 +335,7 @@ export async function runTarget({
       targetBranch: activeBranch(target.path)
     };
 
-    logger.info(`[${label}] güncelleme başlıyor (kaynak: ${source})`);
+    logger.info(`[${label}] starting update (source: ${source})`);
 
     const ranCommands = [];
     for (const rawCmd of target.commands) {
@@ -350,15 +350,15 @@ export async function runTarget({
       });
       if (result.timedOut || result.aborted || result.code !== 0) {
         const why = result.aborted
-          ? 'daemon kapatıldı, geri alındı'
+          ? 'daemon shut down, rolled back'
           : result.timedOut
-            ? `zaman aşımı (${target.commandTimeout}s)`
-            : `çıkış kodu ${result.code}`;
+            ? `timed out (${target.commandTimeout}s)`
+            : `exit code ${result.code}`;
         const tail = (result.stderr || result.stdout || '').trim().split('\n').slice(-8).join('\n');
-        logger.error(`[${label}] komut hatası: ${why}\n${tail}`);
+        logger.error(`[${label}] command failed: ${why}\n${tail}`);
         const { otherFiles } = safeRollback(target.path, before, statusSnapshot(target.path), isCommitPath);
         const warnings = otherFilesWarning(label, otherFiles);
-        return emit('failed', `komut hatası (${cmd}): ${why}`, {
+        return emit('failed', `command failed (${cmd}): ${why}`, {
           commands: ranCommands,
           errorTail: tail,
           ...(warnings.length ? { otherFiles, warnings } : {})
@@ -382,12 +382,12 @@ export async function runTarget({
 
     if (changed.length === 0) {
       if (dirtyTouched.length > 0) {
-        const msg = `güncelleme önceden kirli dosyada kaldı, commit'lenmedi: ${dirtyTouched.join(', ')}`;
+        const msg = `update landed in an already-dirty file, not committed: ${dirtyTouched.join(', ')}`;
         logger.warn(`[${label}] ${msg}`);
         return emit('skipped', msg, { commands: ranCommands, dirtyTouched, ...otherExtra });
       }
-      logger.info(`[${label}] değişiklik yok (güncel)`);
-      return emit('unchanged', 'değişiklik yok', { commands: ranCommands, ...otherExtra });
+      logger.info(`[${label}] no changes (up to date)`);
+      return emit('unchanged', 'no changes', { commands: ranCommands, ...otherExtra });
     }
 
     let commitMsg = interpolateMessage(target.commitMessage, vars);
@@ -395,7 +395,7 @@ export async function runTarget({
     if (dryRun) {
       const changedTracked = changed.filter((p) => !untracked.includes(p));
       const stat = changedTracked.length ? git(['diff', '--stat', '--', ...changedTracked], target.path, '') : '';
-      logger.info(`[${label}] [dry-run] commit atılmayacak: ${changed.join(', ')}\n${stat}`);
+      logger.info(`[${label}] [dry-run] nothing will be committed: ${changed.join(', ')}\n${stat}`);
       safeRollback(target.path, before, after, isCommitPath);
       return emit('committed', `[dry-run] ${commitMsg}`, {
         commands: ranCommands,
@@ -407,12 +407,12 @@ export async function runTarget({
 
     if (dirtyTouched.length > 0) {
       logger.warn(
-        `[${label}] güncelleme önceden kirli dosyada da devam etti, commit'e dahil edilmedi: ${dirtyTouched.join(', ')}`
+        `[${label}] update also touched an already-dirty file, not included in the commit: ${dirtyTouched.join(', ')}`
       );
     }
 
     let shortSha = selectiveCommit(target.path, changed, commitMsg);
-    logger.info(`[${label}] commit ${shortSha}: "${commitMsg}" (${changed.length} dosya)`);
+    logger.info(`[${label}] commit ${shortSha}: "${commitMsg}" (${changed.length} files)`);
 
     // Remember the commit; fold earlier unpushed updeps commits into it if allowed.
     const branch = git(['symbolic-ref', '--short', '-q', 'HEAD'], target.path, '');
@@ -425,7 +425,7 @@ export async function runTarget({
       sources = folded.sources;
       replaced = folded.replaced;
       logger.info(
-        `[${label}] ${replaced.length} commit tek commit'e birleştirildi → ${shortSha}: "${commitMsg}"`
+        `[${label}] squashed ${replaced.length} commits into one → ${shortSha}: "${commitMsg}"`
       );
     }
     if (branch) {
@@ -437,9 +437,9 @@ export async function runTarget({
       logger.info(`[${label}] git push...`);
       try {
         gitOrThrow(['push'], target.path);
-        logger.info(`[${label}] push tamam`);
+        logger.info(`[${label}] push done`);
       } catch (err) {
-        return emit('failed', `commit atıldı ama push başarısız: ${err.message}`, {
+        return emit('failed', `committed, but push failed: ${err.message}`, {
           commands: ranCommands,
           commitSha: shortSha,
           ...(replaced.length ? { squashed: replaced.map((s) => s.slice(0, 7)) } : {}),
@@ -528,7 +528,7 @@ export async function runSourceRepo({
     try {
       results.push(await runTarget({ config, target, trigger, group: groupId, dryRun, echo }));
     } catch (err) {
-      logger.error(`[${target.name}] beklenmeyen hata: ${err.message}`);
+      logger.error(`[${target.name}] unexpected error: ${err.message}`);
       results.push({ status: 'failed', target: target.name, message: err.message });
     }
   }
@@ -592,8 +592,8 @@ export function recordGroupDone({ sourceRepo, trigger, tally }) {
   });
 
   logger.info(
-    `[${sourceRepo.name}] tamamlandı: ${tally.committed} commit, ${tally.unchanged} güncel, ` +
-      `${tally.failed} hata, ${tally.skipped} atlandı`
+    `[${sourceRepo.name}] finished: ${tally.committed} committed, ${tally.unchanged} up to date, ` +
+      `${tally.failed} failed, ${tally.skipped} skipped`
   );
 }
 
@@ -606,8 +606,8 @@ export function recordGroupDone({ sourceRepo, trigger, tally }) {
  */
 export function notifyRunGroup({ notifications, title, tally }) {
   const msg =
-    `${tally.committed} commit, ${tally.unchanged} güncel, ${tally.failed} hata` +
-    (tally.skipped ? `, ${tally.skipped} atlandı` : '');
+    `${tally.committed} committed, ${tally.unchanged} up to date, ${tally.failed} failed` +
+    (tally.skipped ? `, ${tally.skipped} skipped` : '');
   sendNotification({
     type: tally.failed > 0 ? 'fail' : 'ok',
     title,

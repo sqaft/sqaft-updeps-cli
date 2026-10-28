@@ -34,7 +34,7 @@ function seed() {
   fs.writeFileSync(path.join(configDir, 'config.json'), '{"keep":true}\n');
 }
 
-test('resetState boşaltır, daemon bloğu isteğe bağlı korunur', () => {
+test('resetState empties the state; the daemon block is optionally kept', () => {
   seed();
   resetState();
   let s = loadState();
@@ -51,7 +51,7 @@ test('resetState boşaltır, daemon bloğu isteğe bağlı korunur', () => {
   assert.deepEqual(s.openFailures, []);
 });
 
-test('cmdReset --yes: config hariç her şeyi temizler', async () => {
+test('cmdReset --yes: clears everything except the config', async () => {
   seed();
   await cmdReset({ yes: true });
 
@@ -60,18 +60,18 @@ test('cmdReset --yes: config hariç her şeyi temizler', async () => {
   assert.deepEqual(s.queue, { pending: 0, jobs: [] });
   assert.deepEqual(s.repos, {});
 
-  assert.ok(!fs.existsSync(path.join(stateDir, 'journal.jsonl')), 'journal silinmeli');
-  assert.equal(fs.readFileSync(path.join(stateDir, 'logs', 'updeps.log'), 'utf8'), '', 'log sıfırlanmalı');
-  assert.equal(fs.readdirSync(path.join(stateDir, 'locks')).length, 0, 'kilitler silinmeli');
+  assert.ok(!fs.existsSync(path.join(stateDir, 'journal.jsonl')), 'journal should be deleted');
+  assert.equal(fs.readFileSync(path.join(stateDir, 'logs', 'updeps.log'), 'utf8'), '', 'log should be truncated');
+  assert.equal(fs.readdirSync(path.join(stateDir, 'locks')).length, 0, 'locks should be deleted');
 
   assert.equal(
     fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'),
     '{"keep":true}\n',
-    'config dosyasına dokunulmamalı'
+    'the config file should be untouched'
   );
 });
 
-test('cmdReset etkileşimsiz ortamda onaysız reddeder', async () => {
+test('cmdReset refuses without confirmation in a non-interactive environment', async () => {
   seed();
   const origExit = process.exit;
   const origTTY = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
@@ -90,6 +90,6 @@ test('cmdReset etkileşimsiz ortamda onaysız reddeder', async () => {
     if (origTTY) Object.defineProperty(process.stdin, 'isTTY', origTTY);
   }
   assert.equal(exitCode, 1);
-  // hiçbir şey silinmedi
+  // nothing was deleted
   assert.ok(fs.existsSync(path.join(stateDir, 'journal.jsonl')));
 });

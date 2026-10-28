@@ -3,33 +3,33 @@ import { parseArgs, styleText } from 'node:util';
 import { setLevel } from '../src/logger.js';
 import { ConfigError } from '../src/config.js';
 
-const USAGE = `updeps — bağımlı repo güncelleyici
+const USAGE = `updeps — keeps dependent repos up to date
 
-KULLANIM
-  updeps <komut> [seçenekler]
+USAGE
+  updeps <command> [options]
 
-KOMUTLAR
-  init [--force] [--example]      Örnek konfigürasyon oluştur
-  list                           Kaynak repoları ve hedeflerini listele
-  graph                          Bağımlılık ağacı + döngü kontrolü + {pkgs} listeleri
-  add <kaynak> --target <hedef>  Yeni ilişki ekle (--name, --target-name, --command)
-  remove <kaynak> [hedef]        İlişkiyi veya kaynağı sil
-  run [kaynak] [--target X]      Manuel çalıştır (--dry-run)
-  retry --failed | <hedef>      Açık hataları yeniden dene
-  push [--dry-run] [--commit=MSG] Commit'leri bağımlılık sırasıyla push et, daemon'u bekle
-  status [-w/--watch]            Şu an ne çalışıyor, açık hatalar, son çalışmalar
-  history [--failed] [--repo X]  Tüm işlem geçmişi ([--since 2d] [-n N] [--json])
-  show <grup|hedef>             Bir çalışmanın tam detayı (komutlar, çıktı, commit)
-  logs [-f] [-n N]               Ham log
-  doctor                         Sistem sağlık kontrolü
-  start | stop | restart         launchd daemon kontrolü
-  menubar [--install]            SwiftBar/xbar eklentisi
-  reset [--yes] [--keep-daemon]   Config hariç tüm veriyi sil (kuyruk + hatalar)
+COMMANDS
+  init [--force] [--example]      Create a starter configuration
+  list                            List source repos and their targets
+  graph                           Dependency tree + cycle check + {pkgs} lists
+  add <source> --target <target>  Add a new relationship (--name, --target-name, --command)
+  remove <source> [target]        Remove a relationship or a source
+  run [source] [--target X]       Run manually (--dry-run)
+  retry --failed | <target>       Retry open failures
+  push [--dry-run] [--commit=MSG] Push commits in dependency order, wait for the daemon
+  status [-w/--watch]             What is running now, open failures, recent runs
+  history [--failed] [--repo X]   Full run history ([--since 2d] [-n N] [--json])
+  show <group|target>             Full detail of a run (commands, output, commit)
+  logs [-f] [-n N]                Raw log
+  doctor                          System health check
+  start | stop | restart          Control the launchd daemon
+  menubar [--install]             SwiftBar/xbar plugin
+  reset [--yes] [--keep-daemon]   Delete all data except the config (queue + failures)
 
-GENEL
-  -h, --help                     Bu yardım
-  -v, --version                  Sürüm
-  --verbose                      Ayrıntılı log
+GLOBAL OPTIONS
+  -h, --help                      Show this help
+  -v, --version                   Show the version
+  --verbose                       Verbose logging
 `;
 
 const GLOBAL_OPTIONS = {
@@ -132,7 +132,7 @@ async function main() {
     case 'daemon':
       return (await import('../src/daemon.js')).runDaemon();
     default:
-      console.error(styleText('red', `Bilinmeyen komut: ${command}`));
+      console.error(styleText('red', `Unknown command: ${command}`));
       console.log(USAGE);
       process.exit(1);
   }
@@ -148,7 +148,7 @@ main().catch((err) => {
   if (err instanceof ConfigError) {
     console.error(styleText('red', err.message));
   } else {
-    console.error(styleText('red', `Hata: ${err.stack || err.message}`));
+    console.error(styleText('red', `Error: ${err.stack || err.message}`));
   }
   process.exit(1);
 });

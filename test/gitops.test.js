@@ -16,7 +16,7 @@ import {
 import { git } from '../src/exec.js';
 import { createPathMatcher } from '../src/glob.js';
 
-test('yalnızca komutun değiştirdiği dosya commit\'lenir, kirli dosya korunur', () => {
+test('only the file the command changed is committed, the dirty file is preserved', () => {
   const { dir, cleanup } = tmpDir('updeps-git-');
   try {
     const { git: g } = initGitRepo(dir);
@@ -25,13 +25,13 @@ test('yalnızca komutun değiştirdiği dosya commit\'lenir, kirli dosya korunur
     g(['add', '-A']);
     g(['commit', '-qm', 'add files']);
 
-    // kullanıcı src.js üzerinde çalışıyor (kirli)
+    // the user is working on src.js (dirty)
     fs.writeFileSync(path.join(dir, 'src.js'), 'export const x = 2; // WIP\n');
 
     const before = statusSnapshot(dir);
     assert.ok(before.has('src.js'));
 
-    // "komut" lock.json'u değiştirir
+    // the "command" changes lock.json
     fs.writeFileSync(path.join(dir, 'lock.json'), '{"v":2}\n');
 
     const after = statusSnapshot(dir);
@@ -41,9 +41,9 @@ test('yalnızca komutun değiştirdiği dosya commit\'lenir, kirli dosya korunur
 
     selectiveCommit(dir, changed, 'bump lock');
 
-    // lock.json commit'lendi
+    // lock.json was committed
     assert.equal(git(['show', '--stat', '--format=%s', 'HEAD'], dir).split('\n')[0], 'bump lock');
-    // src.js hâlâ kirli ve WIP içeriğiyle duruyor
+    // src.js is still dirty and keeps its WIP content
     assert.match(fs.readFileSync(path.join(dir, 'src.js'), 'utf8'), /WIP/);
     assert.ok(statusSnapshot(dir).has('src.js'));
   } finally {
@@ -51,7 +51,7 @@ test('yalnızca komutun değiştirdiği dosya commit\'lenir, kirli dosya korunur
   }
 });
 
-test('safeRollback kirli dosyaya dokunmaz, temiz-değişeni geri alır', () => {
+test('safeRollback leaves the dirty file alone and reverts the clean-then-changed one', () => {
   const { dir, cleanup } = tmpDir('updeps-git-');
   try {
     const { git: g } = initGitRepo(dir);
@@ -60,28 +60,28 @@ test('safeRollback kirli dosyaya dokunmaz, temiz-değişeni geri alır', () => {
     g(['add', '-A']);
     g(['commit', '-qm', 'base']);
 
-    fs.writeFileSync(path.join(dir, 'wip.txt'), 'user edit\n'); // önceden kirli
+    fs.writeFileSync(path.join(dir, 'wip.txt'), 'user edit\n'); // already dirty beforehand
     const before = statusSnapshot(dir);
 
-    // komut ikisini de değiştirir
+    // the command changes both
     fs.writeFileSync(path.join(dir, 'lock.json'), 'B\n');
     fs.writeFileSync(path.join(dir, 'wip.txt'), 'command clobber\n');
     fs.writeFileSync(path.join(dir, 'new.txt'), 'created by command\n');
     const after = statusSnapshot(dir);
 
-    // üçü de commitPaths kapsamında: korunanlar yalnızca önceden kirli/takipsiz oldukları için korunur
+    // all three match commitPaths: the preserved ones are preserved only because they were already dirty or are untracked
     const res = safeRollback(dir, before, after, createPathMatcher(['*.json', '*.txt']));
 
-    assert.equal(fs.readFileSync(path.join(dir, 'lock.json'), 'utf8'), 'A\n'); // geri alındı
-    assert.equal(fs.readFileSync(path.join(dir, 'wip.txt'), 'utf8'), 'command clobber\n'); // dokunulmadı
-    assert.ok(fs.existsSync(path.join(dir, 'new.txt'))); // takipsiz, silinmedi
+    assert.equal(fs.readFileSync(path.join(dir, 'lock.json'), 'utf8'), 'A\n'); // reverted
+    assert.equal(fs.readFileSync(path.join(dir, 'wip.txt'), 'utf8'), 'command clobber\n'); // untouched
+    assert.ok(fs.existsSync(path.join(dir, 'new.txt'))); // untracked, not deleted
     assert.deepEqual(res, { reverted: ['lock.json'], otherFiles: [] });
   } finally {
     cleanup();
   }
 });
 
-test('safeRollback commitPaths dışındaki temiz-değişen dosyaya dokunmaz, onu raporlar', () => {
+test('safeRollback leaves a clean-then-changed file outside commitPaths alone and reports it', () => {
   const { dir, cleanup } = tmpDir('updeps-git-');
   try {
     const { git: g } = initGitRepo(dir);
@@ -92,15 +92,15 @@ test('safeRollback commitPaths dışındaki temiz-değişen dosyaya dokunmaz, on
     g(['commit', '-qm', 'base']);
 
     const before = statusSnapshot(dir);
-    fs.writeFileSync(path.join(dir, 'package-lock.json'), 'B\n'); // komut
-    fs.writeFileSync(path.join(dir, 'src', 'a.js'), 'başka süreç\n'); // başka bir süreç
-    fs.writeFileSync(path.join(dir, 'notes.md'), 'not\n'); // başka bir süreç
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), 'B\n'); // the command
+    fs.writeFileSync(path.join(dir, 'src', 'a.js'), 'other process\n'); // another process
+    fs.writeFileSync(path.join(dir, 'notes.md'), 'note\n'); // another process
     const after = statusSnapshot(dir);
 
     const res = safeRollback(dir, before, after, createPathMatcher(['package-lock.json']));
 
     assert.equal(fs.readFileSync(path.join(dir, 'package-lock.json'), 'utf8'), 'A\n');
-    assert.equal(fs.readFileSync(path.join(dir, 'src', 'a.js'), 'utf8'), 'başka süreç\n');
+    assert.equal(fs.readFileSync(path.join(dir, 'src', 'a.js'), 'utf8'), 'other process\n');
     assert.ok(fs.existsSync(path.join(dir, 'notes.md')));
     assert.deepEqual(res.reverted, ['package-lock.json']);
     assert.deepEqual(res.otherFiles.sort(), ['notes.md', 'src/a.js']);
@@ -109,7 +109,7 @@ test('safeRollback commitPaths dışındaki temiz-değişen dosyaya dokunmaz, on
   }
 });
 
-test('hashPaths: aynı status koduyla kalan ama içeriği değişen dosyayı yakalar', () => {
+test('hashPaths: catches a file whose content changed but whose status code stayed the same', () => {
   const { dir, cleanup } = tmpDir('updeps-git-');
   try {
     const { git: g } = initGitRepo(dir);
@@ -117,19 +117,19 @@ test('hashPaths: aynı status koduyla kalan ama içeriği değişen dosyayı yak
     g(['add', '-A']);
     g(['commit', '-qm', 'add lock']);
 
-    // kullanıcı zaten kirli bırakmış
+    // the user already left it dirty
     fs.writeFileSync(path.join(dir, 'lock.json'), '{"v":2}\n');
     const before = statusSnapshot(dir);
     const dirtyPaths = [...before.keys()].filter((p) => before.get(p)[0] !== '?');
     assert.deepEqual(dirtyPaths, ['lock.json']);
     const hashesBefore = hashPaths(dir, dirtyPaths);
 
-    // "komut" aynı (zaten kirli) dosyayı bir kez daha değiştirir — status kodu ( M) aynı kalır
+    // the "command" changes the same (already dirty) file once more — the status code ( M) stays the same
     fs.writeFileSync(path.join(dir, 'lock.json'), '{"v":3}\n');
     const after = statusSnapshot(dir);
-    assert.equal(before.get('lock.json'), after.get('lock.json')); // diffSnapshots bunu göremezdi
+    assert.equal(before.get('lock.json'), after.get('lock.json')); // diffSnapshots could not see this
     const { tracked, untracked } = diffSnapshots(before, after);
-    assert.deepEqual([...tracked, ...untracked], []); // mevcut mekanizma körü
+    assert.deepEqual([...tracked, ...untracked], []); // the existing mechanism is blind to it
 
     const hashesAfter = hashPaths(dir, dirtyPaths);
     const touched = dirtyPaths.filter((p) => hashesAfter.get(p) !== hashesBefore.get(p));
@@ -139,11 +139,11 @@ test('hashPaths: aynı status koduyla kalan ama içeriği değişen dosyayı yak
   }
 });
 
-test('hashPaths: dosya değişmemişse aynı hash döner', () => {
+test('hashPaths: returns the same hash when the file is unchanged', () => {
   const { dir, cleanup } = tmpDir('updeps-git-');
   try {
     const { git: g } = initGitRepo(dir);
-    fs.writeFileSync(path.join(dir, 'a.txt'), 'sabit\n');
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'stable\n');
     g(['add', '-A']);
     g(['commit', '-qm', 'add a']);
     const h1 = hashPaths(dir, ['a.txt']);
@@ -155,7 +155,7 @@ test('hashPaths: dosya değişmemişse aynı hash döner', () => {
   }
 });
 
-test('checkPreconditions rebase ortamını yakalar', () => {
+test('checkPreconditions detects a rebase in progress', () => {
   const { dir, cleanup } = tmpDir('updeps-git-');
   try {
     initGitRepo(dir);
@@ -167,7 +167,7 @@ test('checkPreconditions rebase ortamını yakalar', () => {
   }
 });
 
-test('checkPreconditions git olmayan dizini reddeder', () => {
+test('checkPreconditions rejects a directory that is not a git repo', () => {
   const { dir, cleanup } = tmpDir('updeps-git-');
   try {
     assert.equal(checkPreconditions(dir).ok, false);
@@ -177,7 +177,7 @@ test('checkPreconditions git olmayan dizini reddeder', () => {
   }
 });
 
-test('upstreamStatus / remoteTip: upstream yok, ahead sayısı, detached', () => {
+test('upstreamStatus / remoteTip: no upstream, ahead count, detached', () => {
   const { dir, cleanup } = tmpDir('updeps-git-');
   try {
     const remote = path.join(dir, 'remote.git');
@@ -186,7 +186,7 @@ test('upstreamStatus / remoteTip: upstream yok, ahead sayısı, detached', () =>
     git(['init', '-q', '--bare', '-b', 'main'], remote);
     const { git: g } = initGitRepo(work);
 
-    assert.equal(upstreamStatus(work), null); // upstream tanımsız
+    assert.equal(upstreamStatus(work), null); // no upstream configured
     assert.equal(remoteTip(work, 'origin', 'main'), null);
 
     g(['remote', 'add', 'origin', remote]);
@@ -201,7 +201,7 @@ test('upstreamStatus / remoteTip: upstream yok, ahead sayısı, detached', () =>
     g(['commit', '-aqm', 'two']);
     assert.equal(upstreamStatus(work).ahead, 2);
 
-    // yerel branch adı upstream adından farklı olabilir
+    // the local branch name can differ from the upstream name
     g(['checkout', '-q', '-b', 'feature', '--track', 'origin/main']);
     assert.deepEqual(upstreamStatus(work), { branch: 'feature', remote: 'origin', remoteBranch: 'main', ahead: 0 });
 

@@ -8,7 +8,7 @@ export function cmdGraph() {
   console.log(renderTree(config));
   console.log('');
 
-  console.log(styleText('bold', 'Türetilen {pkgs} listeleri'));
+  console.log(styleText('bold', 'Derived {pkgs} lists'));
   const seen = new Set();
   for (const repo of config.repos) {
     for (const pkg of repo.packages) {
@@ -22,16 +22,16 @@ export function cmdGraph() {
 
   const cycles = findCycles(config);
   if (cycles.length === 0) {
-    console.log(styleText('green', '✓ Döngü (cycle) yok.'));
+    console.log(styleText('green', '✓ No cycles.'));
   } else {
-    console.log(styleText('yellow', `⚠ ${cycles.length} döngü bulundu:`));
+    console.log(styleText('yellow', `⚠ ${cycles.length} cycle(s) found:`));
     for (const cycle of cycles) {
       console.log('  ' + cycle.join(' → '));
     }
     console.log(
       styleText(
         'dim',
-        'Döngüler yalnızca yol üzerinde bir yerde push: true açıkken sonsuz tetiklemeye yol açar.'
+        'Cycles cause endless triggering only when push: true is set somewhere along the path.'
       )
     );
   }

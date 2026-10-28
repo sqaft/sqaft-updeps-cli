@@ -50,12 +50,12 @@ function bodyToRegex(body) {
     } else if (c === '?') {
       re += '[^/]';
     } else if (c === '{') {
-      if (inBrace) throw new Error("iç içe '{' desteklenmez");
-      if (!body.includes('}', i + 1)) throw new Error("kapanmayan '{'");
+      if (inBrace) throw new Error("nested '{' is not supported");
+      if (!body.includes('}', i + 1)) throw new Error("unclosed '{'");
       inBrace = true;
       re += '(?:';
     } else if (c === '}') {
-      if (!inBrace) throw new Error("eşi olmayan '}'");
+      if (!inBrace) throw new Error("unmatched '}'");
       inBrace = false;
       re += ')';
     } else if (c === ',' && inBrace) {
@@ -74,15 +74,15 @@ function bodyToRegex(body) {
  * @returns {RegExp}
  */
 export function compileGlob(pattern) {
-  if (typeof pattern !== 'string' || pattern.trim() === '') throw new Error('desen boş olamaz');
-  if (pattern.startsWith('!')) throw new Error("'!' ile olumsuzlama desteklenmez");
+  if (typeof pattern !== 'string' || pattern.trim() === '') throw new Error('pattern must not be empty');
+  if (pattern.startsWith('!')) throw new Error("negation with '!' is not supported");
 
   let p = pattern.startsWith('./') ? pattern.slice(2) : pattern;
   const anchored = p.startsWith('/');
   p = p.replace(/^\/+/, '');
   const dirOnly = p.endsWith('/');
   p = p.replace(/\/+$/, '');
-  if (p === '') throw new Error('desen yalnızca "/" olamaz');
+  if (p === '') throw new Error('pattern must not be just "/"');
 
   const floating = !anchored && !p.includes('/');
   let body = dirOnly ? `${p}/**` : p;

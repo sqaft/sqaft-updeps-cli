@@ -13,7 +13,7 @@ import { validateConfig } from '../config.js';
 export function cmdAdd(positionals, opts = {}) {
   const sourcePath = positionals[0];
   if (!sourcePath || !opts.target) {
-    console.error('Kullanım: updeps add <kaynak-path> --target <hedef-path> [--name <paket-adı>] [--target-name <ad>] [--command "<komut>"]');
+    console.error('Usage: updeps add <source-path> --target <target-path> [--name <package-name>] [--target-name <name>] [--command "<command>"]');
     process.exit(1);
   }
 
@@ -30,7 +30,7 @@ export function cmdAdd(positionals, opts = {}) {
   repo.packages ||= [];
 
   if (repo.packages.some((p) => p.path === opts.target)) {
-    console.error(styleText('yellow', 'Bu hedef zaten kayıtlı.'));
+    console.error(styleText('yellow', 'This target is already registered.'));
     process.exit(1);
   }
 
@@ -45,5 +45,5 @@ export function cmdAdd(positionals, opts = {}) {
   fs.writeFileSync(tmp, JSON.stringify(raw, null, 2) + '\n', 'utf8');
   fs.renameSync(tmp, CONFIG_FILE);
 
-  console.log(styleText('green', `Eklendi: ${repo.name} → ${pkg.name}`));
+  console.log(styleText('green', `Added: ${repo.name} → ${pkg.name}`));
 }

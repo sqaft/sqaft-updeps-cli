@@ -108,7 +108,7 @@ export function findCycles(config) {
  * @returns {string}
  */
 export function renderTree(config) {
-  if (config.repos.length === 0) return '(config boş — henüz kaynak repo tanımlı değil)';
+  if (config.repos.length === 0) return '(config is empty — no source repos defined yet)';
 
   const lines = [];
   for (const repo of config.repos) {

@@ -21,7 +21,7 @@ function baseConfig() {
   return { notifications: false, repos: [] };
 }
 
-test('config değişince onConfigChange tetiklenir — ardışık atomik yazmalarda da', async () => {
+test('onConfigChange fires when the config changes, including on consecutive atomic writes', async () => {
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
   saveConfig(baseConfig());
 
@@ -37,12 +37,12 @@ test('config değişince onConfigChange tetiklenir — ardışık atomik yazmala
   // saveConfig() replaces the file via write-temp + rename (the inode changes).
   saveConfig({ ...baseConfig(), notifications: true });
   for (let i = 0; i < 40 && reloads < 1; i++) await sleep(50);
-  assert.equal(reloads, 1, 'ilk değişiklik yeniden yükleme tetiklemeli');
+  assert.equal(reloads, 1, 'the first change should trigger a reload');
 
   // Second write: the watch must still be live after the inode swap.
   saveConfig({ ...baseConfig(), notifications: false });
   for (let i = 0; i < 40 && reloads < 2; i++) await sleep(50);
-  assert.equal(reloads, 2, 'ikinci değişiklik de tetiklenmeli');
+  assert.equal(reloads, 2, 'the second change should trigger as well');
 
   await watcher.stop();
 });
@@ -69,11 +69,10 @@ function makeSourceRepo(root) {
   return source;
 }
 
-test('start(): ilk kez izlenen dosyada kaçırılan olay tetiklenmez (yalnızca baseline)', async () => {
-  // Not: state.json bu dosyanın tepesinde ayarlanan tek XDG_STATE_HOME'u
-  // paylaşır (paths.js değerleri import anında sabitliyor); reflogTips
-  // anahtarları source repo'nun mutlak yoluyla tutulduğu için testler
-  // arasında çakışma olmaz.
+test('start(): a file watched for the first time triggers no missed event (baseline only)', async () => {
+  // Note: state.json shares the single XDG_STATE_HOME set at the top of this
+  // file (paths.js fixes its values at import time); reflogTips keys are the
+  // source repo's absolute path, so tests don't collide with each other.
   const { dir: root, cleanup: cleanupRoot } = tmpDir('updeps-watcher-catchup-');
   try {
     const source = makeSourceRepo(root);
@@ -94,7 +93,7 @@ test('start(): ilk kez izlenen dosyada kaçırılan olay tetiklenmez (yalnızca 
   }
 });
 
-test('start(): kayıtlı tip ile mevcut tip farklıysa (daemon kapalıyken push olmuş) kaçırılan olay yakalanır', async () => {
+test('start(): a missed event is caught up when the recorded tip differs from the current one (a push happened while the daemon was down)', async () => {
   const { dir: root, cleanup: cleanupRoot } = tmpDir('updeps-watcher-catchup-');
   try {
     const source = makeSourceRepo(root);
@@ -105,19 +104,19 @@ test('start(): kayıtlı tip ile mevcut tip farklıysa (daemon kapalıyken push 
     const events = [];
     const fakeQueue = { enqueue: (repo, event) => events.push(event) };
 
-    // ilk daemon çalışması: baseline yazılır, henüz push yok
+    // first daemon run: the baseline is recorded, no push yet
     const watcher1 = new ReflogWatcher(config, fakeQueue);
     watcher1.start();
     await watcher1.stop();
     assert.equal(events.length, 0);
 
-    // "daemon kapalıyken" bir push daha olur
+    // one more push happens "while the daemon is down"
     fs.writeFileSync(path.join(source, 'f.txt'), 'v2\n');
     g(['commit', '-aqm', 'v2'], source);
     const sha = g(['rev-parse', 'HEAD'], source);
     g(['push', '-q', 'origin', 'main'], source);
 
-    // daemon yeniden başlar (state.json'daki reflogTips korunur)
+    // the daemon restarts (reflogTips in state.json is preserved)
     const watcher2 = new ReflogWatcher(config, fakeQueue);
     watcher2.start();
     await watcher2.stop();
@@ -126,7 +125,7 @@ test('start(): kayıtlı tip ile mevcut tip farklıysa (daemon kapalıyken push 
     assert.equal(events[0].trigger, 'push');
     assert.equal(events[0].sha, sha);
 
-    // başka bir yeniden başlatmada, ara push olmadıysa tekrar tetiklenmez
+    // on another restart with no push in between, it does not fire again
     const watcher3 = new ReflogWatcher(config, fakeQueue);
     watcher3.start();
     await watcher3.stop();

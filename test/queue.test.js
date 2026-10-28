@@ -44,7 +44,7 @@ function makeConfig(overrides = {}) {
   });
 }
 
-test('işler tek tek çalışır, eşzamanlılık asla 1\'i geçmez', async () => {
+test('jobs run one at a time, concurrency never exceeds 1', async () => {
   const cfg = makeConfig();
   let active = 0;
   let maxActive = 0;
@@ -64,7 +64,7 @@ test('işler tek tek çalışır, eşzamanlılık asla 1\'i geçmez', async () =
   assert.equal(maxActive, 1);
 });
 
-test('debounce: aynı kaynağın ardışık olayları birleşir', async () => {
+test('debounce: consecutive events from the same source are merged', async () => {
   const cfg = makeConfig();
   let runs = 0;
   const runner = async () => {
@@ -77,12 +77,12 @@ test('debounce: aynı kaynağın ardışık olayları birleşir', async () => {
   q.enqueue(cfg.repos[0], { trigger: 'push', branch: 'main', sha: 'a3' });
 
   while (!q.idle) await sleep(10);
-  assert.equal(runs, 2); // iki hedef, tek tur
+  assert.equal(runs, 2); // two targets, one round
 });
 
-test('bekleyen iş birleştirme: hâlâ kuyruktaki ortak hedef tek kez çalışır', async () => {
-  // a -> one, two ; b -> two.  İlk iş (one) yavaş; two kuyrukta beklerken
-  // b'nin two işi mevcut bekleyen işe birleşmeli.
+test('pending job merging: a shared target that is still queued runs once', async () => {
+  // a -> one, two ; b -> two.  The first job (one) is slow; while two waits
+  // in the queue, b's two job must merge into the existing pending job.
   const cfg = makeConfig();
   const targetsRun = [];
   const runner = async ({ target }) => {
@@ -91,8 +91,8 @@ test('bekleyen iş birleştirme: hâlâ kuyruktaki ortak hedef tek kez çalış�
     return { status: 'committed', target: target.name, message: '' };
   };
   const q = new UpdateQueue(cfg, {
-    runner,
-    // b'yi two'ya bağla
+    runner
+    // b is pointed at two below
   });
   cfg.repos[1].packages = [{ ...cfg.repos[0].packages[1] }]; // b -> two
 
@@ -103,7 +103,7 @@ test('bekleyen iş birleştirme: hâlâ kuyruktaki ortak hedef tek kez çalış�
   assert.equal(targetsRun.filter((n) => n === 'two').length, 1);
 });
 
-test('çalışan hedefe gelen yeni olay bittikten sonra yeniden kuyruğa alınır', async () => {
+test('a new event for a running target is queued again after it finishes', async () => {
   const cfg = makeConfig();
   const targetsRun = [];
   let firstStarted;
@@ -111,7 +111,7 @@ test('çalışan hedefe gelen yeni olay bittikten sonra yeniden kuyruğa alını
     targetsRun.push(target.name);
     if (targetsRun.length === 1) {
       firstStarted = true;
-      await sleep(80); // one çalışırken b gelecek
+      await sleep(80); // b arrives while one is running
     }
     return { status: 'committed', target: target.name, message: '' };
   };
@@ -120,15 +120,15 @@ test('çalışan hedefe gelen yeni olay bittikten sonra yeniden kuyruğa alını
 
   q.enqueue(cfg.repos[0], { trigger: 'push', branch: 'main', sha: 'a1' });
   while (!firstStarted) await sleep(5);
-  q.enqueue(cfg.repos[1], { trigger: 'push', branch: 'main', sha: 'b1' }); // b -> one, çalışırken
+  q.enqueue(cfg.repos[1], { trigger: 'push', branch: 'main', sha: 'b1' }); // b -> one, while it is running
 
   while (!q.idle) await sleep(10);
   assert.equal(targetsRun.filter((n) => n === 'one').length, 2);
 });
 
-test('coalesce:false (paket ayarı) ile ortak hedef iki kez çalışır', async () => {
+test('coalesce:false (package setting) makes a shared target run twice', async () => {
   const cfg = makeConfig();
-  cfg.repos[0].packages[0].coalesce = false; // 'one' hedefi için kapat
+  cfg.repos[0].packages[0].coalesce = false; // turn it off for the 'one' target
   cfg.repos[1].packages[0].coalesce = false;
   const targetsRun = [];
   const runner = async ({ target }) => {
@@ -142,16 +142,16 @@ test('coalesce:false (paket ayarı) ile ortak hedef iki kez çalışır', async 
   assert.equal(targetsRun.filter((n) => n === 'one').length, 2);
 });
 
-test('varsayılan olarak coalesce açıktır (config override yoksa)', async () => {
+test('coalesce is on by default (without a config override)', async () => {
   const cfg = makeConfig();
   assert.equal(cfg.repos[0].packages[0].coalesce, true);
 });
 
-test('farklı çözülmüş hedef ayarları (execKey) birleşmez, her biri kendi ayarıyla çalışır', async () => {
-  // b'nin 'one' hedefi farklı bir komuta sahip (örn. farklı bir yarn komutu) —
-  // a'nın bekleyen işine birleşirse yanlış komut çalışır. Ayrı iş olmalı.
+test('targets resolved with different settings (execKey) do not merge, each runs with its own settings', async () => {
+  // b's 'one' target has a different command (e.g. a different yarn command) —
+  // merging it into a's pending job would run the wrong command. It must be a separate job.
   const cfg = makeConfig();
-  cfg.repos[1].packages = [{ ...cfg.repos[0].packages[0], commands: ['echo farklı'] }];
+  cfg.repos[1].packages = [{ ...cfg.repos[0].packages[0], commands: ['echo different'] }];
   const runs = [];
   const runner = async ({ target }) => {
     runs.push({ name: target.name, commands: target.commands });
@@ -167,18 +167,18 @@ test('farklı çözülmüş hedef ayarları (execKey) birleşmez, her biri kendi
   assert.equal(oneRuns.length, 2);
   assert.deepEqual(
     oneRuns.map((r) => r.commands).sort(),
-    [['echo farklı'], cfg.repos[0].packages[0].commands].sort()
+    [['echo different'], cfg.repos[0].packages[0].commands].sort()
   );
 });
 
-test('branch filtresine takılan kaynak hedefi kuyruğa hiç girmeden atlanır', async () => {
+test('a target rejected by the branch filter is skipped without ever entering the queue', async () => {
   const cfg = makeConfig();
   cfg.repos[1].packages[0] = { ...cfg.repos[1].packages[0], branches: ['develop'] };
   const runner = async ({ target }) => ({ status: 'committed', target: target.name, message: '' });
   const groups = [];
   const q = new UpdateQueue(cfg, { runner, onGroupDone: (g) => groups.push(g) });
 
-  q.enqueue(cfg.repos[1], { trigger: 'push', branch: 'main', sha: 'b1' }); // 'one' branches:['develop'] → reddedilir
+  q.enqueue(cfg.repos[1], { trigger: 'push', branch: 'main', sha: 'b1' }); // 'one' has branches:['develop'] → rejected
   while (!q.idle) await sleep(10);
   await sleep(20);
 
@@ -187,9 +187,9 @@ test('branch filtresine takılan kaynak hedefi kuyruğa hiç girmeden atlanır',
   assert.equal(groups[0].tally.committed, 0);
 });
 
-test('birleşen işte {bumps} tüm kaynakları listeler', async () => {
-  // 'two' önce çalışacak (yavaş) ve kuyruktaki 'one' işini beklemede tutacak,
-  // böylece b'nin 'one' tetikleyicisi henüz başlamamış o işe birleşebilir.
+test('{bumps} lists every source in a merged job', async () => {
+  // 'two' runs first (slow) and holds the queued 'one' job back, so b's
+  // 'one' trigger can merge into that not-yet-started job.
   const { interpolateMessage } = await import('../src/template.js');
   const cfg = resolveConfig({
     defaults: { debounceMs: 20 },
@@ -225,7 +225,7 @@ test('birleşen işte {bumps} tüm kaynakları listeler', async () => {
   assert.equal(bumps, 'a@aaaaaaa, b@bbbbbbb');
 });
 
-test('kuyruktaki işler state.queue.jobs\'ta görünür ve işlendikçe düşer', async () => {
+test('queued jobs show up in state.queue.jobs and drop out as they are processed', async () => {
   const { loadState } = await import('../src/state.js');
   const cfg = makeConfig();
   const seen = [];
@@ -245,7 +245,7 @@ test('kuyruktaki işler state.queue.jobs\'ta görünür ve işlendikçe düşer'
   assert.deepEqual(loadState().queue, { pending: 0, jobs: [] });
 });
 
-test('config canlı değişirse kuyruktaki iş eski değil güncel hedefle çalışır', async () => {
+test('if the config changes live, a queued job runs with the current target, not the old one', async () => {
   const cfg = resolveConfig({
     defaults: { debounceMs: 20 },
     repos: [
@@ -254,14 +254,14 @@ test('config canlı değişirse kuyruktaki iş eski değil güncel hedefle çal�
         name: 'a',
         packages: [
           { path: '/tgt/two', name: 'two' },
-          { path: '/tgt/one', name: 'one', commands: ['echo eski'] }
+          { path: '/tgt/one', name: 'one', commands: ['echo old'] }
         ]
       }
     ]
   });
   const seenCommands = [];
   const runner = async ({ target }) => {
-    if (target.name === 'two') await sleep(40); // 'one' kuyrukta beklerken config değiştir
+    if (target.name === 'two') await sleep(40); // change the config while 'one' waits in the queue
     else seenCommands.push(target.commands);
     return { status: 'committed', target: target.name, message: '' };
   };
@@ -277,7 +277,7 @@ test('config canlı değişirse kuyruktaki iş eski değil güncel hedefle çal�
         name: 'a',
         packages: [
           { path: '/tgt/two', name: 'two' },
-          { path: '/tgt/one', name: 'one', commands: ['echo güncel'] }
+          { path: '/tgt/one', name: 'one', commands: ['echo current'] }
         ]
       }
     ]
@@ -285,10 +285,10 @@ test('config canlı değişirse kuyruktaki iş eski değil güncel hedefle çal�
   q.updateConfig(updated);
 
   while (!q.idle) await sleep(10);
-  assert.deepEqual(seenCommands, [['echo güncel']]);
+  assert.deepEqual(seenCommands, [['echo current']]);
 });
 
-test('config canlı değişirse kuyruktaki iş hedefi kaldırılmışsa çalıştırılmadan atlanır', async () => {
+test('if the config changes live and a queued job\'s target was removed, it is skipped without running', async () => {
   const cfg = resolveConfig({
     defaults: { debounceMs: 20 },
     repos: [
@@ -314,15 +314,15 @@ test('config canlı değişirse kuyruktaki iş hedefi kaldırılmışsa çalış
 
   const updated = resolveConfig({
     defaults: { debounceMs: 20 },
-    repos: [{ path: '/src/a', name: 'a', packages: [{ path: '/tgt/two', name: 'two' }] }] // 'one' kaldırıldı
+    repos: [{ path: '/src/a', name: 'a', packages: [{ path: '/tgt/two', name: 'two' }] }] // 'one' removed
   });
   q.updateConfig(updated);
 
   while (!q.idle) await sleep(10);
-  assert.deepEqual(ran, ['two']); // 'one' hiç çalıştırılmadı
+  assert.deepEqual(ran, ['two']); // 'one' never ran
 });
 
-test('shutdown: aktif iş abort edilir ve beklenir, kuyruktaki bekleyenler yeniden zamanlanmaz', async () => {
+test('shutdown: the active job is aborted and awaited, queued jobs are not rescheduled', async () => {
   const cfg = makeConfig();
   const seenSignals = [];
   const started = [];
@@ -334,16 +334,16 @@ test('shutdown: aktif iş abort edilir ve beklenir, kuyruktaki bekleyenler yenid
   };
   const q = new UpdateQueue(cfg, { runner });
   q.enqueue(cfg.repos[0], { trigger: 'push', branch: 'main', sha: 'a1' }); // -> one, two
-  await sleep(cfg.defaults.debounceMs + 10); // debounce'ı geçir, ilk iş başlasın
+  await sleep(cfg.defaults.debounceMs + 10); // get past the debounce so the first job starts
 
   await q.shutdown(500);
 
-  assert.equal(started.length, 1); // 'two' hiç başlamadı, kuyruktan düşürüldü
-  assert.equal(seenSignals[0], true); // çalışan işe abort sinyali ulaştı
+  assert.equal(started.length, 1); // 'two' never started, it was dropped from the queue
+  assert.equal(seenSignals[0], true); // the abort signal reached the running job
   assert.equal(q.ready.length, 0);
 });
 
-test('shutdown: yeni enqueue işlenmez (debounce zamanlayıcıları temizlenir)', async () => {
+test('shutdown: a new enqueue is ignored (debounce timers are cleared)', async () => {
   const cfg = makeConfig();
   const runner = async () => ({ status: 'committed', target: 'x', message: '' });
   const q = new UpdateQueue(cfg, { runner });
@@ -354,7 +354,7 @@ test('shutdown: yeni enqueue işlenmez (debounce zamanlayıcıları temizlenir)'
   assert.equal(q.groups.size, 0);
 });
 
-test('grup bittiğinde onGroupDone bir kez çağrılır', async () => {
+test('onGroupDone is called once when the group finishes', async () => {
   const cfg = makeConfig();
   const groups = [];
   const q = new UpdateQueue(cfg, {

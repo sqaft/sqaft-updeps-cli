@@ -51,59 +51,59 @@ export const DEFAULT_VALUES = {
 class ConfigError extends Error {}
 
 function fail(fieldPath, expectation) {
-  throw new ConfigError(`Konfigürasyon hatası — ${fieldPath}: ${expectation}`);
+  throw new ConfigError(`Config error — ${fieldPath}: ${expectation}`);
 }
 
 function assertString(value, fieldPath, { required = false } = {}) {
   if (value === undefined) {
-    if (required) fail(fieldPath, 'zorunlu alan, bir metin (string) bekleniyor.');
+    if (required) fail(fieldPath, 'required field, expected a string.');
     return;
   }
   if (typeof value !== 'string' || value.trim() === '') {
-    fail(fieldPath, 'boş olmayan bir metin (string) olmalı.');
+    fail(fieldPath, 'must be a non-empty string.');
   }
 }
 
 function assertStringArray(value, fieldPath) {
   if (value === undefined) return;
   if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
-    fail(fieldPath, 'bir metin dizisi (string[]) olmalı.');
+    fail(fieldPath, 'must be an array of strings (string[]).');
   }
 }
 
 function assertPositiveNumber(value, fieldPath, { allowZero = false } = {}) {
   if (value === undefined) return;
   if (typeof value !== 'number' || Number.isNaN(value) || value < 0 || (!allowZero && value === 0)) {
-    fail(fieldPath, allowZero ? '0 veya daha büyük bir sayı olmalı.' : "0'dan büyük bir sayı olmalı.");
+    fail(fieldPath, allowZero ? 'must be a number greater than or equal to 0.' : 'must be a number greater than 0.');
   }
 }
 
 function assertGlobArray(value, fieldPath) {
   if (value === undefined) return;
   if (!Array.isArray(value) || value.length === 0) {
-    fail(fieldPath, 'en az bir glob deseni içeren bir metin dizisi (string[]) olmalı.');
+    fail(fieldPath, 'must be an array of strings (string[]) with at least one glob pattern.');
   }
   value.forEach((pattern, i) => {
     if (typeof pattern !== 'string' || pattern.trim() === '') {
-      fail(`${fieldPath}[${i}]`, 'boş olmayan bir glob deseni (string) olmalı.');
+      fail(`${fieldPath}[${i}]`, 'must be a non-empty glob pattern (string).');
     }
     try {
       compileGlob(pattern);
     } catch (err) {
-      fail(`${fieldPath}[${i}]`, `geçersiz glob deseni "${pattern}" (${err.message}).`);
+      fail(`${fieldPath}[${i}]`, `invalid glob pattern "${pattern}" (${err.message}).`);
     }
   });
 }
 
 function assertBoolean(value, fieldPath) {
   if (value === undefined) return;
-  if (typeof value !== 'boolean') fail(fieldPath, 'boolean (true/false) olmalı.');
+  if (typeof value !== 'boolean') fail(fieldPath, 'must be a boolean (true/false).');
 }
 
 function assertEnum(value, fieldPath, allowed) {
   if (value === undefined) return;
   if (!allowed.includes(value)) {
-    fail(fieldPath, `şu değerlerden biri olmalı: ${allowed.join(', ')}.`);
+    fail(fieldPath, `must be one of: ${allowed.join(', ')}.`);
   }
 }
 
@@ -113,14 +113,14 @@ function assertEnum(value, fieldPath, allowed) {
  */
 export function validateConfig(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    fail('kök', 'geçerli bir JSON nesnesi olmalı.');
+    fail('root', 'must be a valid JSON object.');
   }
 
   assertBoolean(raw.notifications, 'notifications');
 
   const d = raw.defaults;
   if (d !== undefined) {
-    if (typeof d !== 'object' || Array.isArray(d)) fail('defaults', 'bir nesne olmalı.');
+    if (typeof d !== 'object' || Array.isArray(d)) fail('defaults', 'must be an object.');
     assertStringArray(d.triggers, 'defaults.triggers');
     (d.triggers || []).forEach((t, i) => assertEnum(t, `defaults.triggers[${i}]`, VALID_TRIGGERS));
     assertStringArray(d.branches, 'defaults.branches');
@@ -138,11 +138,11 @@ export function validateConfig(raw) {
   }
 
   if (raw.repos !== undefined) {
-    if (!Array.isArray(raw.repos)) fail('repos', 'bir dizi (array) olmalı.');
+    if (!Array.isArray(raw.repos)) fail('repos', 'must be an array.');
 
     raw.repos.forEach((repo, ri) => {
       const rp = `repos[${ri}]`;
-      if (!repo || typeof repo !== 'object' || Array.isArray(repo)) fail(rp, 'bir nesne olmalı.');
+      if (!repo || typeof repo !== 'object' || Array.isArray(repo)) fail(rp, 'must be an object.');
       assertString(repo.path, `${rp}.path`, { required: true });
       assertString(repo.name, `${rp}.name`);
       assertStringArray(repo.branches, `${rp}.branches`);
@@ -152,10 +152,10 @@ export function validateConfig(raw) {
       );
 
       if (repo.packages !== undefined) {
-        if (!Array.isArray(repo.packages)) fail(`${rp}.packages`, 'bir dizi olmalı.');
+        if (!Array.isArray(repo.packages)) fail(`${rp}.packages`, 'must be an array.');
         repo.packages.forEach((pkg, pi) => {
           const pp = `${rp}.packages[${pi}]`;
-          if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) fail(pp, 'bir nesne olmalı.');
+          if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) fail(pp, 'must be an object.');
           assertString(pkg.path, `${pp}.path`, { required: true });
           assertString(pkg.name, `${pp}.name`);
           assertStringArray(pkg.triggers, `${pp}.triggers`);
@@ -230,15 +230,15 @@ export function collectWarnings(raw) {
   const warnings = [];
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return warnings;
 
-  for (const k of unknownKeysOf(raw, KNOWN_ROOT_KEYS)) warnings.push(`bilinmeyen alan: ${k}`);
-  for (const k of unknownKeysOf(raw.defaults, KNOWN_DEFAULTS_KEYS)) warnings.push(`bilinmeyen alan: defaults.${k}`);
+  for (const k of unknownKeysOf(raw, KNOWN_ROOT_KEYS)) warnings.push(`unknown field: ${k}`);
+  for (const k of unknownKeysOf(raw.defaults, KNOWN_DEFAULTS_KEYS)) warnings.push(`unknown field: defaults.${k}`);
 
   (Array.isArray(raw.repos) ? raw.repos : []).forEach((repo, ri) => {
-    for (const k of unknownKeysOf(repo, KNOWN_REPO_KEYS)) warnings.push(`bilinmeyen alan: repos[${ri}].${k}`);
+    for (const k of unknownKeysOf(repo, KNOWN_REPO_KEYS)) warnings.push(`unknown field: repos[${ri}].${k}`);
     const packages = repo && Array.isArray(repo.packages) ? repo.packages : [];
     packages.forEach((pkg, pi) => {
       for (const k of unknownKeysOf(pkg, KNOWN_PACKAGE_KEYS)) {
-        warnings.push(`bilinmeyen alan: repos[${ri}].packages[${pi}].${k}`);
+        warnings.push(`unknown field: repos[${ri}].packages[${pi}].${k}`);
       }
     });
   });
@@ -306,15 +306,15 @@ export function resolveConfig(raw) {
 export function loadConfig(filePath = CONFIG_FILE) {
   if (!fs.existsSync(filePath)) {
     throw new ConfigError(
-      `Konfigürasyon dosyası bulunamadı: ${filePath}\n` +
-        '"updeps init" ile örnek bir dosya oluşturabilirsin.'
+      `Config file not found: ${filePath}\n` +
+        'Run "updeps init" to create an example file.'
     );
   }
   let parsed;
   try {
     parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch (err) {
-    throw new ConfigError(`Konfigürasyon dosyası geçerli JSON değil: ${filePath}\n${err.message}`);
+    throw new ConfigError(`Config file is not valid JSON: ${filePath}\n${err.message}`);
   }
   return resolveConfig(parsed);
 }

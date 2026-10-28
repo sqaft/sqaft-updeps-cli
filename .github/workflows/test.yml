@@ -19,3 +19,40 @@ jobs:
       - run: npm ci
 
       - run: npm test
+
+  publish:
+    # Publishes to npm when package.json has a version that is not on npm yet.
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # macOS because the package is darwin-only (npm ci and the tests need it).
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1 (Node 22 bundles npm 10).
+      - run: npm install -g npm@^11.5.1
+
+      - run: npm ci
+
+      - name: Publish if this version is not on npm yet
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          rc=0
+          out=$(npm view "$name@$version" version 2>&1) || rc=$?
+          if [ "$rc" -eq 0 ] && [ -n "$out" ]; then
+            echo "$name@$version is already on npm, nothing to publish."
+          elif [ "$rc" -eq 0 ] || echo "$out" | grep -q 'E404'; then
+            npm publish
+          else
+            echo "$out"
+            exit 1
+          fi

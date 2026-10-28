@@ -8,7 +8,7 @@ import { redact } from '../redact.js';
  */
 export function cmdLogs(opts = {}) {
   if (!fs.existsSync(LOG_FILE)) {
-    console.error(`Log dosyası yok: ${tildify(LOG_FILE)}`);
+    console.error(`Log file not found: ${tildify(LOG_FILE)}`);
     process.exit(1);
   }
 

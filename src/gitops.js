@@ -12,15 +12,15 @@ const CONFLICT_MARKERS = ['rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_
  */
 export function checkPreconditions(targetPath) {
   if (!fs.existsSync(targetPath)) {
-    return { ok: false, reason: `Dizin yok: ${targetPath}` };
+    return { ok: false, reason: `Directory does not exist: ${targetPath}` };
   }
   const gitDir = path.join(targetPath, '.git');
   if (!fs.existsSync(gitDir)) {
-    return { ok: false, reason: `Git reposu değil: ${targetPath}` };
+    return { ok: false, reason: `Not a git repository: ${targetPath}` };
   }
   for (const marker of CONFLICT_MARKERS) {
     if (fs.existsSync(path.join(gitDir, marker))) {
-      return { ok: false, reason: `Repo işlem ortasında (${marker}), atlandı` };
+      return { ok: false, reason: `Repo is mid-operation (${marker}), skipped` };
     }
   }
   return { ok: true };
@@ -246,18 +246,18 @@ export function safeRollback(cwd, before, after, isCommitPath) {
       gitOrThrow(['checkout', '--', ...toRevert], cwd);
       reverted = toRevert;
     } catch (err) {
-      logger.warn(`[rollback] geri alınamadı: ${err.message}`);
+      logger.warn(`[rollback] could not revert: ${err.message}`);
     }
   }
   const keptDirty = ownTracked.filter((p) => before.has(p));
   if (keptDirty.length > 0) {
     logger.warn(
-      `[rollback] komut öncesi zaten kirli olan dosyalar korundu, geri alınmadı: ${keptDirty.join(', ')}`
+      `[rollback] files that were already dirty before the command were kept, not reverted: ${keptDirty.join(', ')}`
     );
   }
   const ownUntracked = untracked.filter(isCommitPath);
   if (ownUntracked.length > 0) {
-    logger.warn(`[rollback] komut sırasında oluşan takipsiz dosyalar silinmedi: ${ownUntracked.join(', ')}`);
+    logger.warn(`[rollback] untracked files created by the command were not deleted: ${ownUntracked.join(', ')}`);
   }
   return { reverted, otherFiles };
 }

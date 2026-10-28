@@ -11,23 +11,23 @@ const { acquireLock, lockNameFor, releaseHeldLocks } = await import('../src/lock
 
 test.after(cleanup);
 
-test('kilit alınır ve bırakılır', async () => {
+test('a lock is acquired and released', async () => {
   const lock = await acquireLock('/repo/x', { waitTimeoutSec: 2 });
   assert.ok(fs.existsSync(lock.lockPath));
   lock.release();
   assert.ok(!fs.existsSync(lock.lockPath));
 });
 
-test('aynı repo ikinci kez alınamaz, timeout atar', async () => {
+test('the same repo cannot be locked twice, it times out', async () => {
   const lock = await acquireLock('/repo/y', { waitTimeoutSec: 2 });
   await assert.rejects(
     () => acquireLock('/repo/y', { waitTimeoutSec: 1 }),
-    /zaman aşımı/
+    /timed out/
   );
   lock.release();
 });
 
-test('bayat kilit çalınır', async () => {
+test('a stale lock is taken over', async () => {
   const lockPath = `${dir}/locks/${lockNameFor('/repo/z')}`;
   fs.mkdirSync(lockPath, { recursive: true });
   const old = Date.now() / 1000 - 1000;
@@ -38,7 +38,7 @@ test('bayat kilit çalınır', async () => {
   lock.release();
 });
 
-test('farklı repolar bağımsız', async () => {
+test('different repos are independent', async () => {
   const a = await acquireLock('/repo/a', { waitTimeoutSec: 2 });
   const b = await acquireLock('/repo/b', { waitTimeoutSec: 2 });
   a.release();
@@ -46,7 +46,7 @@ test('farklı repolar bağımsız', async () => {
   assert.ok(true);
 });
 
-test('sahibi ölmüş kilit beklemeden geri alınır', async () => {
+test('a lock whose owner is dead is reclaimed without waiting', async () => {
   const lockPath = `${dir}/locks/${lockNameFor('/repo/dead')}`;
   fs.mkdirSync(lockPath, { recursive: true });
   fs.writeFileSync(
@@ -56,21 +56,21 @@ test('sahibi ölmüş kilit beklemeden geri alınır', async () => {
 
   const start = Date.now();
   const lock = await acquireLock('/repo/dead', { staleLockSec: 900, waitTimeoutSec: 3 });
-  assert.ok(Date.now() - start < 1500, 'ölü sahipli kilit hemen alınmalı');
+  assert.ok(Date.now() - start < 1500, 'a lock with a dead owner should be acquired immediately');
   assert.ok(fs.existsSync(lock.lockPath));
   lock.release();
 });
 
-test('canlı sahipli kilit geri alınmaz', async () => {
+test('a lock with a live owner is not reclaimed', async () => {
   const held = await acquireLock('/repo/live', { waitTimeoutSec: 2 });
   await assert.rejects(
     () => acquireLock('/repo/live', { waitTimeoutSec: 1 }),
-    /zaman aşımı/
+    /timed out/
   );
   held.release();
 });
 
-test('releaseHeldLocks tutulan tüm kilitleri siler', async () => {
+test('releaseHeldLocks removes every held lock', async () => {
   const l1 = await acquireLock('/repo/h1', { waitTimeoutSec: 2 });
   const l2 = await acquireLock('/repo/h2', { waitTimeoutSec: 2 });
   releaseHeldLocks();

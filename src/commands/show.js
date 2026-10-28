@@ -9,7 +9,7 @@ import { readEvents } from '../journal.js';
 export function cmdShow(positionals) {
   const selector = positionals[0];
   if (!selector) {
-    console.error('Kullanım: updeps show <grup-id | hedef-adı | kaynak-adı>');
+    console.error('Usage: updeps show <group-id | target-name | source-name>');
     process.exit(1);
   }
 
@@ -29,7 +29,7 @@ export function cmdShow(positionals) {
       (r) => r.kind === 'target' && (r.target === selector || r.source === selector)
     );
     if (!match) {
-      console.error(styleText('red', `Kayıt bulunamadı: ${selector}`));
+      console.error(styleText('red', `No record found: ${selector}`));
       process.exit(1);
     }
     groupId = match.group;
@@ -40,18 +40,18 @@ export function cmdShow(positionals) {
   const targets = events.filter((r) => r.kind === 'target');
   const doneEvt = events.find((r) => r.kind === 'group_done');
 
-  console.log(styleText('bold', `Çalışma ${groupId}`));
+  console.log(styleText('bold', `Run ${groupId}`));
   if (start) {
     console.log(
-      `  kaynak   : ${start.source} ${styleText('dim', `(${start.trigger}${start.sha ? ' ' + start.sha.slice(0, 7) : ''})`)}`
+      `  source : ${start.source} ${styleText('dim', `(${start.trigger}${start.sha ? ' ' + start.sha.slice(0, 7) : ''})`)}`
     );
-    console.log(`  zaman    : ${new Date(start.ts).toLocaleString()}`);
+    console.log(`  time   : ${new Date(start.ts).toLocaleString()}`);
     if (start.dryRun) console.log(styleText('dim', '  (dry-run)'));
   }
   if (doneEvt) {
     console.log(
-      `  sonuç    : ${doneEvt.committed} commit, ${doneEvt.unchanged} güncel, ` +
-        `${doneEvt.failed} hata, ${doneEvt.skipped} atlandı`
+      `  result : ${doneEvt.committed} committed, ${doneEvt.unchanged} up to date, ` +
+        `${doneEvt.failed} failed, ${doneEvt.skipped} skipped`
     );
   }
   console.log('');
@@ -63,13 +63,13 @@ export function cmdShow(positionals) {
       skipped: styleText('yellow', '~'),
       failed: styleText('red', '✗')
     }[t.status];
-    console.log(`${mark} ${styleText('bold', t.target)}  ${styleText('dim', `${Math.round((t.durationMs || 0) / 1000)}sn`)}`);
+    console.log(`${mark} ${styleText('bold', t.target)}  ${styleText('dim', `${Math.round((t.durationMs || 0) / 1000)}s`)}`);
     for (const cmd of t.commands || []) console.log(styleText('dim', `    $ ${cmd}`));
     if (t.status === 'committed') {
       console.log(`    ${t.commitSha ? t.commitSha + ' ' : ''}${t.message}`);
-      if (t.files) console.log(styleText('dim', `    dosyalar: ${t.files.join(', ')}`));
-      if (t.squashed) console.log(styleText('dim', `    birleştirilen commit'ler: ${t.squashed.join(', ')}`));
-      if (t.pushed) console.log(styleText('dim', '    push edildi'));
+      if (t.files) console.log(styleText('dim', `    files: ${t.files.join(', ')}`));
+      if (t.squashed) console.log(styleText('dim', `    squashed commits: ${t.squashed.join(', ')}`));
+      if (t.pushed) console.log(styleText('dim', '    pushed'));
     } else if (t.status === 'failed') {
       console.log(`    ${styleText('red', t.message)}`);
       if (t.errorTail) for (const l of t.errorTail.split('\n')) console.log(styleText('dim', `    │ ${l}`));

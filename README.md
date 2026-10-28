@@ -1,114 +1,113 @@
 # @sqaft/updeps-cli
 
-Bir paket `git push` edildiğinde, onu bağımlılık olarak kullanan diğer repolara
-gidip tanımladığın komutları çalıştıran, değişen kilit dosyalarını commit'leyen,
-dil ve paket yöneticisi bağımsız macOS CLI aracı + arka plan servisi.
+A language- and package-manager-agnostic macOS CLI and background service. When a
+package is `git push`ed, it goes to the other repos that depend on it, runs the
+commands you define, and commits the changed lock files.
 
-Yönetilen repolara hiçbir şey eklenmez — ne githook, ne config dosyası, ne
-bağımlılık. Tüm tanım tek bir merkezi dosyada durur; araç repoların varlığını
-bilir, repolar araçtan habersizdir.
-
----
-
-## Nasıl çalışır
-
-1. Bir daemon, tanımladığın kaynak repoların yalnızca ilgili git reflog
-   dosyalarını izler (`.git/logs/refs/remotes/origin/<branch>` — polling yok,
-   FSEvents).
-2. Bir kaynak repoya push ettiğinde git bu dosyayı `update by push` mesajıyla
-   günceller → daemon olayı yakalar. (Push başarısızsa dosya güncellenmez, hiçbir
-   şey olmaz — ekstra doğrulamaya gerek yok.) Daemon kapalıyken (restart,
-   çökme, `updeps stop`) yapılan push'lar kaybolmaz: her reflog dosyasının son
-   görülen ucu `state.json`'da tutulur, `updeps start`'ta mevcut uçla
-   karşılaştırılır ve fark varsa normal akışa aynen bir canlı olay gibi sokulur.
-3. Kısa bir `debounceMs` penceresi sonrası, o kaynağa bağlı **her hedef repo**
-   için sırayla (tüm sistemde aynı anda tek iş):
-   - hedef repo kilitlenir (`mkdir` tabanlı, macOS'ta `flock` yok),
-   - `commands` çalıştırılır,
-   - komut sırasında değişen dosyalardan **yalnızca `commitPaths` ile
-     eşleşenler** (varsayılan: kilit dosyaları ve manifestler) commit'lenir;
-     senin kaydedilmemiş işine dokunulmaz, listenin dışındaki değişiklikler
-     (örn. komut sırasında başka bir sürecin dokunduğu dosyalar) yerinde
-     bırakılıp uyarı olarak raporlanır,
-   - `push: true` ise push edilir (varsayılan: hayır).
-4. Kaynak başına tek bir macOS bildirimi: `3 commit, 2 güncel, 0 hata`.
+Nothing is added to managed repos: no git hooks, no config file, no dependency.
+All definitions live in a single central file; the tool knows about your repos,
+and the repos know nothing about the tool.
 
 ---
 
-## Kurulum
+## How it works
+
+1. A daemon watches only the relevant git reflog files of the source repos you
+   define (`.git/logs/refs/remotes/origin/<branch>`, no polling, FSEvents).
+2. When you push to a source repo, git updates this file with an
+   `update by push` message and the daemon picks up the event. (If the push
+   fails, the file is not updated and nothing happens, so no extra verification
+   is needed.) Pushes made while the daemon is down (restart, crash,
+   `updeps stop`) are not lost: the last seen tip of each reflog file is kept in
+   `state.json`, compared with the current tip on `updeps start`, and any
+   difference enters the normal flow exactly like a live event.
+3. After a short `debounceMs` window, for **every target repo** that depends on
+   that source, one at a time (a single job at a time across the whole system):
+   - the target repo is locked (`mkdir`-based, since macOS has no `flock`),
+   - the `commands` are run,
+   - of the files that changed during the commands, **only those matching
+     `commitPaths`** (default: lock files and manifests) are committed; your
+     uncommitted work is left alone, and changes outside the list (e.g. files
+     touched by another process while the commands ran) are left in place and
+     reported as warnings,
+   - if `push: true`, the commit is pushed (default: no).
+4. One macOS notification per source: `3 committed, 2 up to date, 0 failed`.
+
+---
+
+## Installation
 
 ```bash
-git clone <repo> && cd sqaft-updeps-cli
-npm install
-npm link            # updeps ve sqaft-updeps komutlarını kurar
+npm install -g @sqaft/updeps-cli
 ```
 
-Node.js 22+ ve macOS gerektirir.
+Requires macOS and Node.js 22+. This installs the `updeps` and `sqaft-updeps`
+commands.
 
 ---
 
-## Hızlı başlangıç
+## Quick start
 
 ```bash
-updeps init                 # ~/.config/sqaft-updeps/config.json oluşturur
-# (config'i düzenle)
-updeps doctor               # yolları, git remote'larını, komutları kontrol et
-updeps graph                # bağımlılık ağacını ve türetilen {pkgs} listelerini gör
-updeps run <kaynak> --dry-run   # commit atmadan dene
-updeps start                # launchd daemon'ı başlat
-updeps status               # durum, çalışan iş + kuyruk, açık hatalar
+updeps init                 # creates ~/.config/sqaft-updeps/config.json
+# (edit the config)
+updeps doctor               # check paths, git remotes, and commands
+updeps graph                # see the dependency tree and the derived {pkgs} lists
+updeps run <source> --dry-run   # try it without committing
+updeps start                # start the launchd daemon
+updeps status               # state, running job + queue, open failures
 ```
 
 ---
 
-## Konfigürasyon
+## Configuration
 
-Konum: `~/.config/sqaft-updeps/config.json` (`XDG_CONFIG_HOME`'a saygılı).
+Location: `~/.config/sqaft-updeps/config.json` (honors `XDG_CONFIG_HOME`).
 
-Daemon çalışırken bu dosyayı düzenlersen değişiklik **otomatik algılanır ve
-yeniden yüklenir** — `updeps restart` gerekmez. (Geçersiz JSON / doğrulama
-hatası olursa eski ayarlar korunur ve log'a yazılır.) `updeps init`,
-`updeps add`, `updeps remove` ile yapılan değişiklikler de aynı şekilde canlı
-uygulanır.
+If you edit this file while the daemon is running, the change is **detected and
+reloaded automatically**; no `updeps restart` is needed. (On invalid JSON or a
+validation error, the previous settings are kept and the error is written to the
+log.) Changes made with `updeps init`, `updeps add`, and `updeps remove` are
+applied live the same way.
 
-Bilinmeyen bir alan adı (`comands` gibi bir yazım hatası) config'i geçersiz
-kılmaz — sessizce yok sayılıp varsayılana düşmek yerine `updeps doctor`
-çıktısında ve daemon log'unda uyarı olarak görünür.
+An unknown field name (a typo such as `comands`) does not invalidate the config.
+Instead of being silently ignored and falling back to the default, it shows up as
+a warning in the `updeps doctor` output and in the daemon log.
 
 ```jsonc
 {
   "notifications": true,
   "defaults": {
     "triggers": ["push"],                 // push | fetch | commit | merge
-    "branches": [],                       // boş = kaynağın varsayılan branch'i (origin/HEAD)
+    "branches": [],                       // empty = the source's default branch (origin/HEAD)
     "commands": ["npm update {pkgs} --no-audit --no-fund"],
     "commitMessage": "chore(deps): bump {bumps}",
-    "commandTimeout": 300,                // saniye
+    "commandTimeout": 300,                // seconds
     "debounceMs": 3000,
-    "staleLockSec": 900,                  // bu kadar eski kilit "bayat" sayılır
-    "waitTimeoutSec": 0,                  // 0 = kilit için sınırsız bekle
+    "staleLockSec": 900,                  // locks older than this are considered "stale"
+    "waitTimeoutSec": 0,                  // 0 = wait for the lock indefinitely
     "dirtyPolicy": "selective",           // selective | skip
-    // "commitPaths": [...]               // commit'lenecek dosyalar (glob); varsayılan için bkz. "commitPaths"
+    // "commitPaths": [...]               // files to commit (globs); see "commitPaths" for the default
     "push": false,
-    "coalesce": true,                     // bkz. "Eşzamanlılık"
-    "squash": true                        // bkz. "Önceki update commit'lerini birleştirme"
+    "coalesce": true,                     // see "Concurrency"
+    "squash": true                        // see "Squashing previous update commits"
   },
   "repos": [
     {
       "path": "~/workspace/acme/acme-api",
-      "name": "@acme/api",                // paket yöneticisindeki bağımlılık adı ({pkg}/{pkgs})
-      "branches": ["main"],               // opsiyonel, kaynağa özel
+      "name": "@acme/api",                // dependency name in the package manager ({pkg}/{pkgs})
+      "branches": ["main"],               // optional, per source
       "packages": [
         {
           "path": "~/workspace/acme/acme-worker",
-          "name": "acme-worker",          // sadece etiket (log/bildirim); verilmezse klasör adı
+          "name": "acme-worker",          // label only (log/notification); defaults to the folder name
           "commands": ["yarn upgrade {pkgs}"],
           "commitMessage": "deps: {bumps}",
           "push": false,
           "squash": true,
           "commandTimeout": 300,
           "dirtyPolicy": "selective",
-          "commitPaths": ["package.json", "yarn.lock"]  // varsayılan listenin yerine geçer
+          "commitPaths": ["package.json", "yarn.lock"]  // replaces the default list
         }
       ]
     }
@@ -116,70 +115,72 @@ kılmaz — sessizce yok sayılıp varsayılana düşmek yerine `updeps doctor`
 }
 ```
 
-Çok organizasyonlu bir örnek için: [`examples/config.json`](examples/config.json)
-(`updeps init --example` ile bunu yazar).
+For a multi-organization example, see [`examples/config.json`](examples/config.json)
+(`updeps init --example` writes it).
 
-### `name` alanının iki anlamı
+### The two meanings of `name`
 
-- **`repos[].name`** → paket yöneticisindeki bağımlılık kimliği. `{pkg}` ve
-  `{pkgs}` bununla doldurulur. Verilmezse klasör adı.
-- **`repos[].packages[].name`** → yalnızca insan-okunur etiket (log, bildirim,
-  CLI çıktısı). Verilmezse klasör adı.
+- **`repos[].name`**: the dependency identifier in the package manager. `{pkg}`
+  and `{pkgs}` are filled from it. Defaults to the folder name.
+- **`repos[].packages[].name`**: a human-readable label only (log, notification,
+  CLI output). Defaults to the folder name.
 
-### `{pkgs}` nasıl türetilir
+### How `{pkgs}` is derived
 
-Bir hedef repo için `{pkgs}`, **o hedefi bağımlı olarak listeleyen tüm
-kaynakların** adlarıdır (config sırasıyla). Örneğin `examples/config.json`'da
-`umbrella-machine` dört ayrı kaynağa bağlı; hangisi push edilirse edilsin komut:
+For a target repo, `{pkgs}` is the names of **all the sources that list that
+target as a dependent** (in config order). For example, in `examples/config.json`
+`umbrella-machine` is linked to four separate sources; whichever one is pushed,
+the command is:
 
 ```
 yarn upgrade @umbrella/api @umbrella/mobile-client @umbrella/web-client @umbrella/realtime
 ```
 
-Böylece nested/transitive kopyalar da tek çağrıda güncellenir ve repolar arası
-SHA tutarsızlığı oluşmaz — lockfile parse etmeye gerek kalmadan.
+This way nested/transitive copies are updated in a single call and the SHAs stay
+consistent across repos, without having to parse lock files.
 
-### Şablon değişkenleri
+### Template variables
 
-`commands` ve `commitMessage` içinde:
+In `commands` and `commitMessage`:
 
-| Değişken | İçerik |
+| Variable | Content |
 |---|---|
-| `{pkg}` | Tetikleyen kaynağın adı |
-| `{pkgs}` | Türetilen paket listesi (komutta shell-quote'lu, commit mesajında virgüllü) |
-| `{sha}` | Tetikleyen commit'in 7 haneli SHA'sı |
-| `{bumps}` | `{pkg}@{sha}`; aynı hedefe birleşen (coalesce) birden çok kaynak varsa `a@sha1, b@sha2` |
-| `{sourcePath}` · `{sourceBranch}` | Kaynak repo yolu / branch'i |
-| `{targetPath}` · `{targetBranch}` | Hedef repo yolu / aktif branch'i |
+| `{pkg}` | Name of the triggering source |
+| `{pkgs}` | The derived package list (shell-quoted in commands, comma-separated in the commit message) |
+| `{sha}` | 7-character SHA of the triggering commit |
+| `{bumps}` | `{pkg}@{sha}`; if several sources were coalesced into the same target, `a@sha1, b@sha2` |
+| `{sourcePath}` · `{sourceBranch}` | Source repo path / branch |
+| `{targetPath}` · `{targetBranch}` | Target repo path / active branch |
 
 ### `dirtyPolicy`
 
-- **`selective`** (varsayılan): hedef repoda kaydedilmemiş değişikliğin olsa bile
-  çalışır; komut öncesi/sonrası `git status` farkı alınır ve farktaki
-  dosyalardan **yalnızca [`commitPaths`](#commitpaths) ile eşleşenler**
-  stage'lenip commit'lenir. Senin kaydedilmemiş işine dokunulmaz;
-  `git add -A` hiçbir zaman kullanılmaz.
-- **`skip`**: hedef working tree kirliyse hiç dokunma, "atlandı" bildir.
+- **`selective`** (default): runs even if the target repo has uncommitted
+  changes; `git status` is diffed before and after the commands, and of the
+  files in the diff **only those matching [`commitPaths`](#commitpaths)** are
+  staged and committed. Your uncommitted work is left alone; `git add -A` is
+  never used.
+- **`skip`**: if the target working tree is dirty, don't touch it at all and
+  report it as skipped.
 
-Komut çalışırken başka bir süreç de (editör, build watcher, başka bir araç) repoda
-dosya oluşturabilir veya düzenleyebilir; `git status` farkı bunu komutun
-yaptığından ayıramaz. Bu yüzden farktaki `commitPaths` dışı dosyalar (takipli ya
-da takipsiz) ne commit'lenir ne geri alınır: yerinde bırakılır ve uyarı olarak
-log'a ve çalışma sonucuna yazılır (`updeps show`, `updeps history`, journal'da
-`otherFiles` / `warnings`).
+While the commands run, another process (an editor, a build watcher, another
+tool) may also create or edit files in the repo, and the `git status` diff cannot
+tell that apart from what the commands did. So files in the diff that are outside
+`commitPaths` (tracked or untracked) are neither committed nor reverted: they are
+left in place and written as warnings to the log and to the run result
+(`updeps show`, `updeps history`, and `otherFiles` / `warnings` in the journal).
 
-Komut hata verirse yalnızca **komut öncesi temiz olan**, komut sırasında değişen
-ve `commitPaths` ile eşleşen takipli dosyalar geri alınır; diğer değişikliklere
-dokunulmaz, takipsiz dosyalar silinmez. `--dry-run` de commit atmadan aynı
-kuralla geri alır. `git reset --hard` / `git clean -fd` hiçbir koşulda
-çalıştırılmaz.
+If a command fails, only tracked files that **were clean before the command**,
+changed during it, and match `commitPaths` are reverted; other changes are left
+alone and untracked files are not deleted. `--dry-run` reverts with the same rule
+instead of committing. `git reset --hard` / `git clean -fd` are never run under
+any circumstances.
 
 ### `commitPaths`
 
-Bir hedefte commit'lenebilecek dosyaların glob listesi. `defaults` veya hedef
-düzeyinde verilir; hedef düzeyindeki liste varsayılanın yerine geçer (birleşmez).
-Varsayılan, yaygın paket yöneticilerinin kilit dosyaları ve manifestleridir (her
-derinlikte):
+A glob list of the files that may be committed in a target. It can be set in
+`defaults` or per target; a target-level list replaces the default (they are not
+merged). The default is the lock files and manifests of common package managers
+(at any depth):
 
 ```
 package.json  package-lock.json  npm-shrinkwrap.json  yarn.lock  pnpm-lock.yaml
@@ -187,217 +188,257 @@ bun.lock  bun.lockb  composer.json  composer.lock  Cargo.toml  Cargo.lock
 go.mod  go.sum  Gemfile.lock  poetry.lock  uv.lock  Package.resolved  pubspec.lock
 ```
 
-Komut sırasında değişen bir yol listedeki bir desenle eşleşirse commit'lenir;
-yeni oluşan (takipsiz) dosyalar da yalnızca eşleşirlerse commit'lenir. Desenler
-repo köküne göre göreli yollarla eşleştirilir:
+If a path that changed during the commands matches a pattern in the list, it is
+committed; newly created (untracked) files are also committed only if they match.
+Patterns are matched against paths relative to the repo root:
 
-| Desen | Anlamı |
+| Pattern | Meaning |
 |---|---|
-| `yarn.lock` | `/` içermeyen desen her derinlikteki dosya adıyla eşleşir (`yarn.lock`, `packages/web/yarn.lock`) |
-| `/package.json`, `apps/*/package.json` | `/` ile başlayan ya da `/` içeren desen repo köküne sabitlenir |
-| `*`, `?` | `/` dışında herhangi bir karakter dizisi / tek karakter |
-| `gen/**/*.json` | `**` tam bir yol parçası olarak sıfır veya daha fazla dizinle eşleşir |
-| `generated/` | `/` ile biten desen o dizinin altındaki her şeyle eşleşir |
-| `{go.mod,go.sum}` | seçeneklerden biri (iç içe olamaz) |
+| `yarn.lock` | A pattern without `/` matches the file name at any depth (`yarn.lock`, `packages/web/yarn.lock`) |
+| `/package.json`, `apps/*/package.json` | A pattern that starts with `/` or contains `/` is anchored to the repo root |
+| `*`, `?` | Any sequence of characters other than `/` / a single character |
+| `gen/**/*.json` | `**` as a whole path segment matches zero or more directories |
+| `generated/` | A pattern ending in `/` matches everything under that directory |
+| `{go.mod,go.sum}` | One of the alternatives (cannot be nested) |
 
-`!` ile olumsuzlama desteklenmez. Boş liste, boş/geçersiz desen (kapanmayan
-`{` gibi) config doğrulamasında reddedilir. Komutun ürettiği her dosyanın
-commit'lenmesi isteniyorsa `["**"]` verilebilir; bu durumda komut sırasında
-başka süreçlerin yaptığı değişiklikler de commit'e girer.
+Negation with `!` is not supported. An empty list and an empty or invalid pattern
+(such as an unclosed `{`) are rejected during config validation. If you want
+every file the commands produce to be committed, you can use `["**"]`; in that
+case changes made by other processes while the commands ran are committed too.
 
-### Önceki update commit'lerini birleştirme (`squash`)
+### Squashing previous update commits (`squash`)
 
-Hedef repoda updeps'in daha önce attığı ve **henüz push edilmemiş** commit'ler
-varsa (aynı hedef birkaç kez güncellendiyse), yeni update commit'i onlarla tek
-commit'te birleştirilir; her update için ayrı commit birikmez. Commit mesajı
-`{bumps}` ile birleşen tüm kaynakları listeler (bir kaynak birden çok kez
-güncellendiyse en son SHA'sıyla).
+If the target repo has commits that updeps made earlier and that have **not been
+pushed yet** (because the same target was updated several times), the new update
+commit is combined with them into a single commit; a separate commit does not
+pile up for every update. The commit message lists all the combined sources with
+`{bumps}` (a source that was updated more than once appears with its latest SHA).
 
-Hata payını sıfıra indirmek için kurallar katıdır:
+The rules are strict to rule out mistakes:
 
-- Yalnızca updeps'in kendi kaydettiği commit'ler (`state.json` → `autoCommits`,
-  tam SHA eşleşmesi) birleştirilir. Mesajı benzeyen ya da senin attığın hiçbir
-  commit birleştirilmez; bir updeps commit'ini `--amend`/rebase edersen artık
-  tanınmaz.
-- Zincir yeni commit'in hemen altından başlar ve ilk updeps'e ait olmayan
-  commit'te biter: araya senin bir commit'in girdiyse onun altındakilere
-  dokunulmaz.
-- Push edilmiş (herhangi bir remote-tracking ref'ten erişilebilen) commit
-  birleştirilmez; başka bir yerel branch ya da tag aynı commit'i içeriyorsa,
-  merge commit varsa, HEAD detached ise ya da `commit.gpgsign` açıksa
-  birleştirme yapılmaz ve update ayrı commit olarak kalır.
-- Birleştirme yalnızca branch referansını taşır; index'e ve working tree'ye
-  dokunulmaz, sonuç commit'in ağacı (tree) update commit'iyle birebir aynıdır —
-  dosya içeriği değişemez. Ref güncellemesi karşılaştır-ve-değiştir (CAS)
-  yapılır: araya başka bir commit girerse hiçbir şey olmaz. Birleştirilen
-  commit'ler reflog'da kalır ve `updeps show` ile görünür.
-- Herhangi bir hata/belirsizlikte update ayrı commit olarak kalır; birleştirme
-  hiçbir zaman çalışmayı başarısız yapmaz.
+- Only commits that updeps itself recorded (`state.json` → `autoCommits`, exact
+  full-SHA match) are squashed. No commit that merely looks similar, or that you
+  made, is ever squashed; if you `--amend`/rebase an updeps commit it is no
+  longer recognized.
+- The chain starts right below the new commit and ends at the first commit that
+  does not belong to updeps: if one of your commits is in between, everything
+  below it is left alone.
+- A pushed commit (one reachable from any remote-tracking ref) is not squashed;
+  if another local branch or tag contains the same commit, if there is a merge
+  commit, if HEAD is detached, or if `commit.gpgsign` is on, no squashing takes
+  place and the update stays a separate commit.
+- Squashing only moves the branch reference; the index and the working tree are
+  not touched, and the resulting commit's tree is identical to the update
+  commit's, so file contents cannot change. The ref update is a
+  compare-and-swap (CAS): if another commit lands in between, nothing happens.
+  The squashed commits stay in the reflog and are visible with `updeps show`.
+- On any error or uncertainty the update stays a separate commit; squashing never
+  fails a run.
 
-Kapatmak için `"squash": false` (`defaults` veya hedef düzeyinde).
+To turn it off, set `"squash": false` (in `defaults` or per target).
 
-### `push: true` ve zincirleme
+### `push: true` and cascading
 
-`push: true` yaparsan hedefe atılan commit push edilir; bu da o hedefi kaynak
-olarak listeleyen başka repoları tetikler (zincirleme). Genellikle istenmeyen bir
-durumdur; varsayılan `false`. `updeps graph` ve `updeps doctor` bağımlılık
-döngülerini (cycle) uyarır. Zinciri kendi elinle ve kontrollü yürütmek için
-`updeps push` kullan (aşağıda).
+With `push: true`, the commit made in the target is pushed, which in turn triggers
+other repos that list that target as a source (a cascade). This is usually
+unwanted, so the default is `false`. `updeps graph` and `updeps doctor` warn
+about dependency cycles. To run the chain yourself, in a controlled way, use
+`updeps push` (below).
 
 ---
 
-## Zincirleme push (`updeps push`)
+## Cascade push (`updeps push`)
 
-Birden çok repoda push edilmemiş commit biriktiğinde, rastgele sırayla push
-etmek aynı hedefin birden çok kez güncellenmesine yol açar: `A → B → C`
-zincirinde B, A'nın güncellemesini almadan push edilirse C iki kez güncellenir.
-`updeps push` bunu tek güncellemeye indirir:
+When unpushed commits have accumulated in several repos, pushing them in an
+arbitrary order causes the same target to be updated more than once: in an
+`A → B → C` chain, if B is pushed before it has received A's update, C is
+updated twice. `updeps push` reduces this to a single update:
 
 ```bash
-cd ~/workspace/acme       # bir repoda, repoları barındıran bir dizinde ya da ikisi birden (workspace reposu)
-updeps push --dry-run     # kapsam + tahmini turlar, hiçbir şey push etmez
+cd ~/workspace/acme       # in a repo, in a directory that holds repos, or both (a workspace repo)
+updeps push --dry-run     # scope + estimated rounds, pushes nothing
 updeps push
-updeps push --commit="wip: toplu değişiklik"   # önce değişikliği olan repoları commit'le
+updeps push --commit="wip: bulk changes"   # first commit the repos that have changes
 ```
 
-Kapsam iki parçanın birleşimidir, ikisi de boş olabilir:
+The scope is the union of two parts, either of which may be empty:
 
-- bulunduğun dizin bir repodaysa (reponun kökü ya da herhangi bir alt dizini)
-  o repo,
-- bulunduğun dizinin **bir seviye** altındaki git repoları (`node_modules`,
-  `vendor` ve `.` ile başlayan dizinler hariç; daha derine inilmez).
+- if the current directory is inside a repo (the repo root or any subdirectory),
+  that repo,
+- the git repos **one level** below the current directory (except `node_modules`,
+  `vendor`, and directories starting with `.`; it does not go deeper).
 
-Böylece proje repolarını alt dizinlerinde barındıran bir workspace reposunun
-kökünde çalıştırınca workspace reposu ve tüm proje repoları birlikte push
-edilir; repo olmayan bir dizinde yalnızca hemen altındaki repolar, tek bir proje
-reposunda yalnızca o repo. Config'te olmayan repolar da push edilir; sıra
-config'teki kaynak → hedef ilişkilerinden çıkarılır. Upstream'i olmayan ya da
-detached HEAD'deki repolar atlanır.
+So when run at the root of a workspace repo that holds project repos in its
+subdirectories, the workspace repo and all the project repos are pushed together;
+in a directory that is not a repo, only the repos immediately below it; in a
+single project repo, only that repo. Repos that are not in the config are pushed
+too; the order is derived from the source → target relationships in the config.
+Repos with no upstream or with a detached HEAD are skipped.
 
-Her tur:
+Each round:
 
-1. Push edilmemiş commit'i olan repolar arasından, (transitif) kaynaklarından
-   hiçbiri push bekleyenler arasında olmayanlar push edilir. Yukarıdaki örnekte
-   A, B ve C'nin üçünde de commit varsa önce yalnızca A push edilir.
-2. Daemon'un bu push'ları işlemesi beklenir: ilgili kaynakların `origin`
-   ucu `state.json`'daki `lastProcessedSha` ile eşleşene, çalışan iş ve
-   kuyruk kalmayana kadar. Daemon'un kendi `push: true` push'ları da beklenir.
-3. Daemon'un attığı güncelleme commit'leri yeni push edilmemiş commit olarak
-   görünür; B artık hem kendi commit'iyle hem A'dan gelen güncellemeyle tek
-   seferde push edilir. Push edilecek commit kalmayana kadar tekrarlanır.
+1. Among the repos with unpushed commits, those none of whose (transitive)
+   sources are among the repos waiting to be pushed are pushed. In the example
+   above, if A, B, and C all have commits, only A is pushed first.
+2. It waits for the daemon to process these pushes: until the `origin` tip of the
+   relevant sources matches `lastProcessedSha` in `state.json`, and there is no
+   running job or queue left. The daemon's own `push: true` pushes are awaited
+   too.
+3. The update commits made by the daemon show up as new unpushed commits; B is
+   now pushed in one go with both its own commit and the update that came from A.
+   This repeats until there are no commits left to push.
 
-`--commit="mesaj"`: daemon boşa çıktıktan sonra, ilk push'tan önce, kapsamdaki
-push edilebilir (upstream'i olan, detached HEAD'de ve merge/rebase ortasında
-olmayan) her repoda bekleyen tüm değişiklikler (takipli, silinen ve takipsiz
-dosyalar; `.gitignore` geçerli) `git add -A` + `git commit -m "mesaj"` ile tek
-commit'e alınır. Repo'nun kendi hook'ları çalışır; herhangi bir repoda commit
-atılamazsa (hook hatası, çözülmemiş çakışma vb.) hiçbir şey push edilmeden
-durulur. Commit'ler push sırasına normal commit gibi katılır, yani yeni bir
-kaynak commit'i bağımlı repoları aynı turlarda günceller. `--dry-run` ile
-birlikte hangi repolarda kaç dosyanın commit'leneceğini gösterir. Bu
-commit'ler senin commit'lerindir: updeps'in `squash` birleştirmesine hiçbir
-zaman girmezler.
+`--commit="message"`: after the daemon has gone idle and before the first push,
+in every pushable repo in scope (one that has an upstream and is not in a
+detached HEAD or in the middle of a merge/rebase), all pending changes (tracked,
+deleted, and untracked files; `.gitignore` applies) are put into a single commit
+with `git add -A` + `git commit -m "message"`. The repo's own hooks run; if a
+commit cannot be made in any repo (a hook failure, an unresolved conflict, etc.),
+it stops without pushing anything. The commits take part in the push order like
+ordinary commits, so a new source commit updates the dependent repos in the same
+rounds. With `--dry-run` it shows how many files would be committed in which
+repos. These commits are yours: they never take part in updeps' `squash`
+merging.
 
-Başlamadan önce daemon çalışıyor olmalıdır (`updeps start`). Bir push başarısız
-olursa, daemon bir hedefi güncelleyemezse (`failed`) ya da daemon push'u
-işlemezse komut durur ve `1` ile çıkar; sorunu giderip tekrar çalıştırınca
-kaldığı yerden devam eder. Hiçbir `fetch`/`pull`/rebase yapılmaz: remote
-ilerideyse push reddedilir ve komut durur.
+The daemon must be running before you start (`updeps start`). If a push fails, if
+the daemon cannot update a target (`failed`), or if the daemon does not process a
+push, the command stops and exits with `1`; once you fix the problem and run it
+again, it continues where it left off. No `fetch`/`pull`/rebase is ever done: if
+the remote is ahead, the push is rejected and the command stops.
 
 ---
 
-## Komutlar
+## Commands
 
-| Komut | İşlev |
+| Command | What it does |
 |---|---|
-| `updeps init [--force] [--example]` | Örnek konfigürasyon oluşturur |
-| `updeps list` | Kaynak repoları ve hedeflerini listeler |
-| `updeps graph` | ASCII bağımlılık ağacı + döngü kontrolü + türetilen `{pkgs}` listeleri |
-| `updeps add <kaynak> --target <hedef> [--name N] [--target-name N] [--command "..."]` | Config'e ilişki ekler |
-| `updeps remove <kaynak> [hedef]` | İlişkiyi veya kaynağı siler |
-| `updeps run [kaynak] [--target X] [--dry-run]` | Manuel çalıştırma (tetikleyici/branch filtrelerini atlar) |
-| `updeps retry --failed` \| `updeps retry <hedef>` | Açık hataları yeniden dener |
-| `updeps push [--dry-run] [--commit=MSG]` | Bulunduğun dizindeki (içinde bulunduğun repo ve bir seviye altındaki repolar) push edilmemiş commit'leri bağımlılık sırasıyla push eder ve her turda daemon'un güncellemelerini bekler. Bkz. "Zincirleme push" |
-| `updeps status [-w/--watch]` | Şu an ne çalışıyor + kuyruktaki hedefler, **açık hatalar**, son çalışmalar. `--watch` = saniyede bir yenilenen canlı görünüm |
-| `updeps history [--failed] [--repo X] [--since 2d] [-n N] [--json]` | Tüm işlem geçmişi (kalıcı JSONL günlüğünden) |
-| `updeps show <grup-id \| hedef \| kaynak>` | Bir çalışmanın tam detayı: komutlar, çıktı, commit SHA, hata çıktısı |
-| `updeps logs [-f] [-n N]` | Ham log |
-| `updeps doctor` | Sistem sağlık kontrolü |
-| `updeps start` · `stop` · `restart` | launchd daemon kontrolü |
-| `updeps menubar [--install]` | SwiftBar / xbar menü çubuğu eklentisi |
-| `updeps reset [--yes] [--keep-daemon]` | Config **hariç** tüm veriyi siler: kuyruk, açık hatalar, geçmiş (journal), ham loglar, işlenmiş SHA takibi, kilitler. Daemon çalışıyorsa bellekteki kuyruğu da boşaltmak için yeniden başlatılır (`--keep-daemon` ile atlanır). `--yes` onayı geçer. Menü çubuğunda **Bakım › Verileri temizle** butonu da aynı işi yapar. |
+| `updeps init [--force] [--example]` | Creates a sample configuration |
+| `updeps list` | Lists the source repos and their targets |
+| `updeps graph` | ASCII dependency tree + cycle check + derived `{pkgs}` lists |
+| `updeps add <source> --target <target> [--name N] [--target-name N] [--command "..."]` | Adds a relationship to the config |
+| `updeps remove <source> [target]` | Removes a relationship or a source |
+| `updeps run [source] [--target X] [--dry-run]` | Manual run (skips trigger/branch filters) |
+| `updeps retry --failed` \| `updeps retry <target>` | Retries open failures |
+| `updeps push [--dry-run] [--commit=MSG]` | Pushes the unpushed commits in the current directory (the repo you are in and the repos one level below) in dependency order, waiting for the daemon's updates after each round. See "Cascade push" |
+| `updeps status [-w/--watch]` | What is running right now + queued targets, **open failures**, recent runs. `--watch` = a live view refreshed every second |
+| `updeps history [--failed] [--repo X] [--since 2d] [-n N] [--json]` | The full operation history (from the persistent JSONL journal) |
+| `updeps show <group-id \| target \| source>` | Full detail of a run: commands, output, commit SHA, error output |
+| `updeps logs [-f] [-n N]` | Raw log |
+| `updeps doctor` | System health check |
+| `updeps start` · `stop` · `restart` | launchd daemon control |
+| `updeps menubar [--install]` | SwiftBar / xbar menu bar plugin |
+| `updeps reset [--yes] [--keep-daemon]` | Deletes all data **except** the config: queue, open failures, history (journal), raw logs, processed-SHA tracking, locks. If the daemon is running it is restarted to also clear the in-memory queue (skipped with `--keep-daemon`). `--yes` skips the confirmation. The **Maintenance › Clear data** button in the menu bar does the same. |
 
 ---
 
-## Eşzamanlılık
+## Concurrency
 
-Tüm sistemde **aynı anda tek iş** çalışır (global seri kuyruk). Bir kaynağa
-ardışık push'lar `debounceMs` içinde birleşir. Kuyrukta henüz başlamamış, aynı
-hedefe ait bir iş varsa ve o hedefin `coalesce` ayarı açıksa (varsayılan
-`true`) yeni tetikleme ona eklenir (ayrı iş açılmaz) — `{pkgs}` zaten tüm
-kaynakları kapsadığı için ikinci çalıştırma çoğu zaman no-op olurdu; birleşen
-işte `{bumps}` her kaynağı ayrı ayrı listeler (`a@sha1, b@sha2`). `coalesce:
-false` yapılırsa aynı debounce penceresinde biriken her kaynak için hedef ayrı
-ayrı çalıştırılır. İki kaynağın aynı hedef için **farklı** komut/branch/vb.
-tanımladığı durumlarda (örn. biri `branches: ["main"]`, diğeri farklı bir
-`commands` listesi) birleştirme hiçbir zaman olmaz — her biri kendi ayarıyla
-ayrı iş olarak çalışır, böylece bir kaynağın ayarı diğerine sızmaz. Çalışmakta
-olan bir hedefe yeni olay gelirse iş bittikten sonra tekrar sıraya alınır.
+**A single job runs at a time** across the whole system (a global serial queue).
+Consecutive pushes to a source merge within `debounceMs`. If the queue holds a job
+for the same target that has not started yet, and that target's `coalesce`
+setting is on (default `true`), the new trigger is added to it (no separate job
+is created); since `{pkgs}` already covers all the sources, a second run would
+usually be a no-op. In the merged job `{bumps}` lists each source separately
+(`a@sha1, b@sha2`). With `coalesce: false`, the target is run separately for each
+source that accumulated in the same debounce window. When two sources define
+**different** commands/branches/etc. for the same target (e.g. one has
+`branches: ["main"]` and the other a different `commands` list), merging never
+happens: each one runs as a separate job with its own settings, so one source's
+settings never leak into the other. If a new event arrives for a target that is
+currently running, it is queued again after the job finishes.
 
 ---
 
-## İzleme ve hata takibi
+## Monitoring and failure tracking
 
-Her işlem `~/.local/state/sqaft-updeps/journal.jsonl` dosyasına tek satır JSON
-olarak, kalıcı biçimde yazılır (5MB'da `.1`'e döner). Üç yerden görürsün:
+Every operation is written persistently to
+`~/.local/state/sqaft-updeps/journal.jsonl` as a single line of JSON (rotated to
+`.1` at 5MB). You can see it in three places:
 
-- **`updeps status`** — şu an ne çalışıyor + kuyruktaki hedefler, **çözülmemiş
-  açık hatalar**, son 10 çalışma. `--watch` ile terminal penceresini açık
-  bırakıp canlı izlersin.
-- **`updeps history --failed --since 3d`** — filtreli geçmiş; `--json` ile boru.
-- **`updeps show <hedef>`** — tek çalışmanın komutları, çıktısı, commit'i.
+- **`updeps status`**: what is running right now + queued targets, **unresolved
+  open failures**, the last 10 runs. With `--watch` you can leave the terminal
+  window open and follow it live.
+- **`updeps history --failed --since 3d`**: filtered history; pipe it with
+  `--json`.
+- **`updeps show <target>`**: a single run's commands, output, and commit.
 
-Açık hatalar `state.json`'da kalıcı tutulur; o hedef bir daha başarılı/değişiksiz
-çalışınca (daemon'dan veya `updeps retry --failed` ile) otomatik temizlenir.
-Menü çubuğunda `⚠N` (hata) ve `⧗N` (çalışan + kuyrukta bekleyen iş) rozetleri
-ile tıklanabilir hata listesi görünür.
+Open failures are kept persistently in `state.json`; when that target next runs
+successfully or with no changes (from the daemon or via `updeps retry --failed`),
+the failure is cleared automatically. The menu bar shows `⚠N` (failures) and `⧗N`
+(running + queued jobs) badges and a clickable list of failures.
 
-**Gizli bilgi maskeleme:** komut çıktısındaki git remote token'ları, GitHub
-PAT'leri, `Authorization` header'ları vb. log'a, journal'a ve bildirime
-yazılmadan önce `***` ile maskelenir (`src/redact.js`).
-
-## Dosya konumları
+## File locations
 
 ```
-~/.config/sqaft-updeps/config.json                    tanım (sen düzenlersin)
-~/.local/state/sqaft-updeps/state.json                runtime durumu, açık hatalar
-~/.local/state/sqaft-updeps/journal.jsonl             kalıcı işlem günlüğü
-~/.local/state/sqaft-updeps/locks/                    hedef repo kilitleri
-~/.local/state/sqaft-updeps/logs/updeps.log           ham log (5MB'da rotasyon)
+~/.config/sqaft-updeps/config.json                    definitions (you edit this)
+~/.local/state/sqaft-updeps/state.json                runtime state, open failures
+~/.local/state/sqaft-updeps/journal.jsonl             persistent operation journal
+~/.local/state/sqaft-updeps/locks/                    target repo locks
+~/.local/state/sqaft-updeps/logs/updeps.log           raw log (rotated at 5MB)
 ~/Library/LaunchAgents/com.sqaft.updeps.daemon.plist  launchd agent
 ```
 
-`XDG_CONFIG_HOME` / `XDG_STATE_HOME` tanımlıysa onlara uyar.
+If `XDG_CONFIG_HOME` / `XDG_STATE_HOME` are set, they are honored.
+
+### Node version managers and reinstalls
+
+The launchd agent (`~/Library/LaunchAgents/com.sqaft.updeps.daemon.plist`) and the
+SwiftBar/xbar plugin run `node` through the PATH saved at `updeps start` and
+`updeps menubar --install` (your PATH at that moment, plus the directory of the
+Node running the CLI). They do not pin a Node binary, so Homebrew upgrades and
+switching between installed Node versions keep working.
+
+It still breaks when no supported Node (see `engines` in `package.json`) remains on
+that PATH, or when the package itself was installed inside a Node version that has
+been removed (nvm keeps global packages per version). Reinstall the package, then
+run `updeps restart` (and `updeps menubar --install` for the plugin). After
+switching versions, `updeps restart` also refreshes the saved PATH.
+`updeps doctor` and `updeps status` report a missing or too old Node and a missing
+CLI, and the menu bar shows it too.
+
+After upgrading the package, the running daemon is still on the old code until it
+is restarted. `updeps status` (and `updeps doctor`) warn when the installed code
+files are newer than the running daemon; run `updeps restart` to load the new
+code.
 
 ---
 
-## Testler
+## Security
+
+The commands in the config run through the shell with your user's permissions, so
+treat the config file as trusted code: anyone who can edit it can run commands as
+you. updeps adds nothing to the repos it manages.
+
+**Secret redaction:** git remote tokens, GitHub PATs, `Authorization` headers,
+etc. in command output are masked with `***` before being written to the log, the
+journal, and notifications (`src/redact.js`).
+
+---
+
+## Development
 
 ```bash
-npm test        # node:test, ek bağımlılık yok
+git clone https://github.com/sqaft/sqaft-updeps-cli
+cd sqaft-updeps-cli
+npm install
+npm link            # installs the updeps and sqaft-updeps commands
+npm test            # node:test, no extra dependencies
 ```
 
----
-
-## Notlar
-
-- Komut `.gitignore`'lu bir dosyayı (`node_modules/` gibi) değiştirirse
-  `git status`'ta görünmez — bu istenen davranıştır. Komut `commitPaths` ile
-  eşleşen hiçbir dosyayı değiştirmezse sonuç "güncel" (unchanged) olur;
-  eşleşmeyen değişiklikler varsa uyarı olarak görünür.
+Publishing happens from CI: when the `version` in `package.json` is not on npm yet,
+the `publish` job in `.github/workflows/test.yml` publishes it after the tests pass.
 
 ---
 
-## Lisans
+## Notes
 
-MIT
+- If a command changes a `.gitignore`d file (such as `node_modules/`), it does
+  not show up in `git status`; this is intended. If the command changes no file
+  that matches `commitPaths`, the result is "up to date" (`unchanged`); if there
+  are non-matching changes, they appear as a warning.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

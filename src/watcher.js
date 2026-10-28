@@ -61,7 +61,7 @@ export class ReflogWatcher {
     for (const repo of this.config.repos) {
       const gitDir = path.join(repo.path, '.git');
       if (!fs.existsSync(gitDir)) {
-        logger.warn(`[${repo.name}] git dizini yok, izlenmiyor: ${repo.path}`);
+        logger.warn(`[${repo.name}] no git directory, not watching: ${repo.path}`);
         continue;
       }
 
@@ -94,8 +94,8 @@ export class ReflogWatcher {
     const { files, byFile } = this._plan();
     this.byFile = byFile;
 
-    logger.info(`Reflog izleyici: ${files.length} dosya`);
-    files.forEach((f) => logger.debug(`  izleniyor: ${f}`));
+    logger.info(`Reflog watcher: ${files.length} file(s)`);
+    files.forEach((f) => logger.debug(`  watching: ${f}`));
 
     this._catchUpMissedEvents(files);
 
@@ -113,9 +113,8 @@ export class ReflogWatcher {
   /**
    * Catches up on reflog changes that happened while nothing was watching
    * (daemon down for a restart/crash, or the gap before `updeps start`).
-   * Without this, `start()` used to just record the current tip as a fresh
-   * baseline — a push made during that gap left no trace, since chokidar
-   * only reports changes from here on (`ignoreInitial: true`).
+   * Without this, a push made during that gap would leave no trace, since
+   * chokidar only reports changes from here on (`ignoreInitial: true`).
    *
    * Compares each watched file's current tip against the tip recorded the
    * last time *this exact file* was watched (`state.reflogTips`, keyed by
@@ -141,7 +140,7 @@ export class ReflogWatcher {
     });
 
     for (const file of missed) {
-      logger.info(`[${this.byFile.get(file)?.name}] kaçırılan olay yakalandı, işleniyor: ${file}`);
+      logger.info(`[${this.byFile.get(file)?.name}] caught up on a missed event, processing: ${file}`);
       this._onReflogChange(file);
     }
   }
@@ -168,7 +167,7 @@ export class ReflogWatcher {
       if (this.configReloadTimer) clearTimeout(this.configReloadTimer);
       this.configReloadTimer = setTimeout(() => {
         this.configReloadTimer = null;
-        logger.info('Konfigürasyon değişti, yeniden yükleniyor...');
+        logger.info('Config changed, reloading...');
         this.onConfigChange();
       }, 100);
     };
@@ -201,7 +200,7 @@ export class ReflogWatcher {
     if (!wanted) return;
 
     logger.info(
-      `[${repo.name}] ${event.trigger} algılandı (branch: ${event.branch}, ` +
+      `[${repo.name}] ${event.trigger} detected (branch: ${event.branch}, ` +
         `sha: ${event.sha.slice(0, 7)})`
     );
     this.queue.enqueue(repo, {

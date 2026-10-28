@@ -61,28 +61,28 @@ const subjects = (work) => g(['log', '--format=%s'], work).split('\n');
 /** Commits above the pushed base commit. */
 const count = (t, ref = 'HEAD') => Number(g(['rev-list', '--count', `${t.baseSha}..${ref}`], t.work));
 
-test('ardışık updeps commit\'leri tek commit\'e birleşir, mesaj tüm bump\'ları listeler', async () => {
+test('consecutive updeps commits are squashed into one, the message lists every bump', async () => {
   const t = makeTarget();
   const r1 = await bump(t, 'a');
   const r2 = await bump(t, 'b');
-  const r3 = await bump(t, 'a'); // a ikinci kez: en son sha'sı kalır
+  const r3 = await bump(t, 'a'); // a a second time: its latest sha is kept
 
   assert.equal(r1.status, 'committed');
   assert.equal(r2.status, 'committed');
   assert.equal(r3.status, 'committed');
-  assert.equal(count(t), 1); // tek updeps commit
+  assert.equal(count(t), 1); // a single updeps commit
   const [msg] = subjects(t.work);
   assert.equal(msg, 'chore(deps): bump a@3000000, b@2000000');
 
-  // üç güncellemenin hepsi dosyada duruyor
+  // all three updates are in the file
   assert.equal(fs.readFileSync(path.join(t.work, 'yarn.lock'), 'utf8').trim().split('\n').length, 3);
-  // state: yalnızca güncel commit kayıtlı
+  // state: only the current commit is recorded
   const recorded = loadState().autoCommits[t.work];
   assert.equal(recorded.length, 1);
   assert.equal(recorded[0].sha, g(['rev-parse', 'HEAD'], t.work));
 });
 
-test('push edilmiş commit\'e dokunulmaz, yeni update ayrı commit olur', async () => {
+test('a pushed commit is left alone, a new update becomes a separate commit', async () => {
   const t = makeTarget();
   await bump(t, 'a');
   g(['push', '-q', 'origin', 'main'], t.work);
@@ -92,7 +92,7 @@ test('push edilmiş commit\'e dokunulmaz, yeni update ayrı commit olur', async 
   assert.match(subjects(t.work)[1], /bump a@/);
 });
 
-test('araya giren kullanıcı commit\'i engeller: kullanıcının commit\'i asla katlanmaz', async () => {
+test('an intervening user commit stops the squash: the user\'s commit is never folded', async () => {
   const t = makeTarget();
   await bump(t, 'a');
   fs.writeFileSync(path.join(t.work, 'own.txt'), 'mine\n');
@@ -106,7 +106,7 @@ test('araya giren kullanıcı commit\'i engeller: kullanıcının commit\'i asla
   );
 });
 
-test('kullanıcı updeps commit\'ini amend ederse artık tanınmaz, katlanmaz', async () => {
+test('if the user amends an updeps commit it is no longer recognized and is not folded', async () => {
   const t = makeTarget();
   await bump(t, 'a');
   g(['commit', '--amend', '-qm', 'edited by me'], t.work);
@@ -116,23 +116,23 @@ test('kullanıcı updeps commit\'ini amend ederse artık tanınmaz, katlanmaz', 
   assert.equal(subjects(t.work)[1], 'edited by me');
 });
 
-test('squash: false ile ayrı commit\'ler kalır', async () => {
+test('squash: false keeps separate commits', async () => {
   const t = makeTarget({ squash: false });
   await bump(t, 'a');
   await bump(t, 'b');
   assert.equal(count(t), 2);
 });
 
-test('başka bir yerel branch aynı commit\'i içeriyorsa katlanmaz', async () => {
+test('not folded if another local branch contains the same commit', async () => {
   const t = makeTarget();
   await bump(t, 'a');
-  g(['branch', 'keep'], t.work); // keep, a-commit'ini içeriyor
+  g(['branch', 'keep'], t.work); // keep contains the a commit
   await bump(t, 'b');
   assert.equal(count(t), 2);
   assert.equal(count(t, 'keep'), 1);
 });
 
-test('kullanıcının kirli/staged dosyaları birleştirmeden etkilenmez', async () => {
+test('the user\'s dirty/staged files are unaffected by squashing', async () => {
   const t = makeTarget();
   fs.writeFileSync(path.join(t.work, 'README.md'), '# wip\n');
   fs.writeFileSync(path.join(t.work, 'staged.txt'), 'staged\n');
@@ -146,22 +146,22 @@ test('kullanıcının kirli/staged dosyaları birleştirmeden etkilenmez', async
   assert.equal(count(t), 1);
   const files = g(['show', '--name-only', '--format=', 'HEAD'], t.work).split('\n');
   assert.deepEqual(files, ['yarn.lock']);
-  // kullanıcının durumu aynen duruyor (yarn.lock commit'lendi, o yüzden listeden çıkmış olur)
+  // the user's state is unchanged (yarn.lock was committed, so it drops out of the list)
   assert.equal(g(['status', '--porcelain'], t.work), statusBefore);
   assert.equal(fs.readFileSync(path.join(t.work, 'README.md'), 'utf8'), '# wip\n');
 });
 
-test('birleştirilen commit\'ler reflog\'da kalır (geri alınabilir)', async () => {
+test('squashed commits stay in the reflog (recoverable)', async () => {
   const t = makeTarget();
   await bump(t, 'a');
   const first = g(['rev-parse', 'HEAD'], t.work);
   await bump(t, 'b');
   assert.notEqual(g(['rev-parse', 'HEAD'], t.work), first);
-  assert.equal(g(['cat-file', '-t', first], t.work), 'commit'); // obje duruyor
+  assert.equal(g(['cat-file', '-t', first], t.work), 'commit'); // the object is still there
   assert.match(g(['reflog', '-n', '5'], t.work), /updeps: squash/);
 });
 
-test('commit.gpgsign açıkken birleştirme yapılmaz', async () => {
+test('no squash while commit.gpgsign is on', async () => {
   const t = makeTarget();
   await bump(t, 'a');
   const head = g(['rev-parse', 'HEAD'], t.work);
@@ -170,7 +170,7 @@ test('commit.gpgsign açıkken birleştirme yapılmaz', async () => {
   assert.equal(squashableChain(t.work, 'main', head, recorded), null);
 });
 
-test('squashableChain / squashOnto: CAS — branch bu arada ilerlediyse hiçbir şey olmaz', () => {
+test('squashableChain / squashOnto: CAS — nothing happens if the branch moved in the meantime', () => {
   const { work } = makeTarget();
   const base = g(['rev-parse', 'HEAD'], work);
   fs.writeFileSync(path.join(work, 'x.txt'), '1\n');
@@ -178,7 +178,7 @@ test('squashableChain / squashOnto: CAS — branch bu arada ilerlediyse hiçbir 
   g(['commit', '-qm', 'N'], work);
   const n = g(['rev-parse', 'HEAD'], work);
 
-  // kullanıcı tam o sırada yeni commit atıyor
+  // the user makes a new commit right at that moment
   fs.writeFileSync(path.join(work, 'x.txt'), '2\n');
   g(['commit', '-aqm', 'user'], work);
   const moved = g(['rev-parse', 'HEAD'], work);
@@ -187,7 +187,7 @@ test('squashableChain / squashOnto: CAS — branch bu arada ilerlediyse hiçbir 
   assert.equal(g(['rev-parse', 'HEAD'], work), moved);
 });
 
-test('squashOnto: ağaç base ile aynıysa (net değişiklik yok) atlanır', () => {
+test('squashOnto: skipped if the tree equals base (no net change)', () => {
   const { work } = makeTarget();
   const base = g(['rev-parse', 'HEAD'], work);
   fs.writeFileSync(path.join(work, 'x.txt'), '1\n');
@@ -201,31 +201,31 @@ test('squashOnto: ağaç base ile aynıysa (net değişiklik yok) atlanır', () 
   assert.equal(g(['rev-parse', 'HEAD'], work), n);
 });
 
-test('squashOnto: ağaç birebir aynı kalır', async () => {
+test('squashOnto: the tree is preserved exactly', async () => {
   const t = makeTarget();
   await bump(t, 'a');
   const treeBefore = (await bump(t, 'b')) && g(['rev-parse', 'HEAD^{tree}'], t.work);
   await bump(t, 'c');
-  // c sonrası: tek commit; ağacı, c'nin eklediği satır dahil 3 satırı içerir
+  // after c: a single commit; its tree has 3 lines, including the one c added
   assert.equal(count(t), 1);
   assert.notEqual(g(['rev-parse', 'HEAD^{tree}'], t.work), treeBefore);
   assert.equal(g(['show', 'HEAD:yarn.lock'], t.work).trim().split('\n').length, 3);
 });
 
-test('kısmen push edilmiş zincirde yalnızca push edilmemiş kısım birleşir', async () => {
+test('in a partially pushed chain only the unpushed part is squashed', async () => {
   const t = makeTarget();
   await bump(t, 'a');
-  g(['push', '-q', 'origin', 'main'], t.work); // a push edildi
+  g(['push', '-q', 'origin', 'main'], t.work); // a was pushed
   const pushedSha = g(['rev-parse', 'HEAD'], t.work);
   await bump(t, 'b');
   await bump(t, 'c');
 
-  assert.equal(count(t), 2); // a (pushed) + b ve c'nin birleşimi
+  assert.equal(count(t), 2); // a (pushed) + b and c squashed together
   assert.equal(g(['rev-parse', 'HEAD^'], t.work), pushedSha);
   assert.match(subjects(t.work)[0], /^chore\(deps\): bump b@\d{7}, c@\d{7}$/);
 });
 
-test('birleştirme merge commit\'te durur', async () => {
+test('squashing stops at a merge commit', async () => {
   const t = makeTarget();
   await bump(t, 'a');
   const recorded = loadState().autoCommits[t.work];
@@ -239,7 +239,7 @@ test('birleştirme merge commit\'te durur', async () => {
   g(['merge', '-q', '--no-ff', '-m', 'merge side', 'side'], t.work);
   g(['branch', '-q', '-D', 'side'], t.work);
 
-  // merge commit updeps'in değil ve 2 ebeveynli: zincir en üstte kopar
+  // the merge commit isn't updeps's and has 2 parents: the chain breaks at the top
   assert.equal(squashableChain(t.work, 'main', g(['rev-parse', 'HEAD'], t.work), recorded), null);
   assert.equal(g(['cat-file', '-t', aSha], t.work), 'commit');
 });

@@ -66,7 +66,7 @@ const depsCommits = (repo) =>
     .split('\n')
     .filter((s) => s.startsWith('chore(deps)')).length;
 
-test('A→B→C: her repo bağımlılık sırasıyla push edilir, C yalnızca bir kez güncellenir', async () => {
+test('A→B→C: each repo is pushed in dependency order, C is updated only once', async () => {
   const a = makeRepo('chain', 'a', OK_BUMP);
   const b = makeRepo('chain', 'b', OK_BUMP);
   const c = makeRepo('chain', 'c', OK_BUMP);
@@ -101,7 +101,7 @@ test('A→B→C: her repo bağımlılık sırasıyla push edilir, C yalnızca bi
 
     for (const repo of [a, b, c]) assert.equal(upstreamStatus(repo).ahead, 0);
 
-    // B: A'dan tek güncelleme; C: B'den tek güncelleme (B'nin kendi commit'iyle birlikte tek push'ta gitti)
+    // B: a single update from A; C: a single update from B (it went out in one push together with B's own commit)
     assert.equal(depsCommits(b), 1);
     assert.equal(depsCommits(c), 1);
     assert.equal(depsCommits(a), 0);
@@ -111,7 +111,7 @@ test('A→B→C: her repo bağımlılık sırasıyla push edilir, C yalnızca bi
   }
 });
 
-test('hedef güncellemesi başarısız olursa döngü durur ve hatayı döndürür', async () => {
+test('stops and returns the failure when a target update fails', async () => {
   const a = makeRepo('fail', 'a', OK_BUMP);
   const b = makeRepo('fail', 'b', FAIL_BUMP);
   const c = makeRepo('fail', 'c', OK_BUMP);
@@ -137,16 +137,16 @@ test('hedef güncellemesi başarısız olursa döngü durur ve hatayı döndür�
 
     assert.equal(result.failed.length, 1);
     assert.equal(result.failed[0].target, 'b');
-    assert.equal(result.rounds.length, 1); // yalnızca A push edildi
+    assert.equal(result.rounds.length, 1); // only A was pushed
     assert.equal(upstreamStatus(a).ahead, 0);
-    assert.equal(upstreamStatus(b).ahead, 1); // B ve C dokunulmadı
+    assert.equal(upstreamStatus(b).ahead, 1); // B and C were left untouched
     assert.equal(upstreamStatus(c).ahead, 1);
   } finally {
     await watcher.stop();
   }
 });
 
-test('daemon çalışmıyorsa hata verir', async () => {
+test('throws when the daemon is not running', async () => {
   const a = makeRepo('dead', 'a', OK_BUMP);
   const config = resolveConfig({
     notifications: false,
@@ -155,19 +155,19 @@ test('daemon çalışmıyorsa hata verir', async () => {
   });
   await assert.rejects(
     runCascade({ config, repos: [a], isDaemonAlive: () => false, pollMs: 10 }),
-    /Daemon çalışmıyor/
+    /The daemon is not running/
   );
 });
 
-test('--commit: değişikliği olan repolar önce commit\'lenir, sonra push edilir', async () => {
+test('--commit: repos with changes are committed first, then pushed', async () => {
   const dirty = makeRepo('cm', 'dirty', OK_BUMP);
   const clean = makeRepo('cm', 'clean', OK_BUMP);
   const onlyDirty = makeRepo('cm', 'onlydirty', OK_BUMP);
-  g(['push', '-q', 'origin', 'main'], onlyDirty); // yalnızca kirli dosya var, push edilmemiş commit yok
+  g(['push', '-q', 'origin', 'main'], onlyDirty); // only a dirty file, no unpushed commit
 
-  fs.writeFileSync(path.join(dirty, 'own.txt'), 'changed\n'); // takipli değişiklik
-  fs.writeFileSync(path.join(dirty, 'new.txt'), 'new\n'); // takipsiz dosya
-  fs.rmSync(path.join(dirty, 'bump.sh')); // silinen dosya
+  fs.writeFileSync(path.join(dirty, 'own.txt'), 'changed\n'); // tracked change
+  fs.writeFileSync(path.join(dirty, 'new.txt'), 'new\n'); // untracked file
+  fs.rmSync(path.join(dirty, 'bump.sh')); // deleted file
   fs.writeFileSync(path.join(onlyDirty, 'own.txt'), 'wip\n');
 
   const config = resolveConfig({ notifications: false, defaults: { debounceMs: 50 }, repos: [] });
@@ -177,7 +177,7 @@ test('--commit: değişikliği olan repolar önce commit\'lenir, sonra push edil
     repos: [dirty, clean, onlyDirty],
     isDaemonAlive: () => true,
     pollMs: 50,
-    commitMessage: 'wip: toplu commit',
+    commitMessage: 'wip: bulk commit',
     log: (l) => lines.push(l)
   });
 
@@ -187,17 +187,17 @@ test('--commit: değişikliği olan repolar önce commit\'lenir, sonra push edil
     assert.equal(upstreamStatus(repo).ahead, 0);
     assert.equal(g(['status', '--porcelain'], repo), '');
   }
-  assert.equal(g(['log', '-1', '--format=%s'], dirty), 'wip: toplu commit');
+  assert.equal(g(['log', '-1', '--format=%s'], dirty), 'wip: bulk commit');
   assert.deepEqual(
     g(['show', '--name-status', '--format=', 'HEAD'], dirty).split('\n').sort(),
     ['A\tnew.txt', 'D\tbump.sh', 'M\town.txt']
   );
-  assert.notEqual(g(['log', '-1', '--format=%s'], clean), 'wip: toplu commit'); // temiz repo commit'lenmedi
-  assert.equal(g(['log', '-1', '--format=%s'], onlyDirty), 'wip: toplu commit');
+  assert.notEqual(g(['log', '-1', '--format=%s'], clean), 'wip: bulk commit'); // the clean repo was not committed
+  assert.equal(g(['log', '-1', '--format=%s'], onlyDirty), 'wip: bulk commit');
   assert.ok(lines.some((l) => l.startsWith('Commit: cm-dirty')));
 });
 
-test('--commit: commit edilen kaynak değişikliği zincirin geri kalanına push\'la akar', async () => {
+test('--commit: a committed source change flows to the rest of the chain with the push', async () => {
   const a = makeRepo('cc', 'a', OK_BUMP);
   const b = makeRepo('cc', 'b', OK_BUMP);
   fs.writeFileSync(path.join(a, 'own.txt'), 'edited\n');
@@ -229,8 +229,8 @@ test('--commit: commit edilen kaynak değişikliği zincirin geri kalanına push
   }
 });
 
-test('--commit: commit başarısız olursa (hook) hiçbir repo push edilmez', async () => {
-  const first = makeRepo('ch', 'a-first', OK_BUMP); // sıralamada önce, push edilmemiş commit'i var
+test('--commit: no repo is pushed when a commit fails (hook)', async () => {
+  const first = makeRepo('ch', 'a-first', OK_BUMP); // sorts first, has an unpushed commit
   const hooked = makeRepo('ch', 'b-hooked', OK_BUMP);
   fs.writeFileSync(path.join(hooked, 'own.txt'), 'dirty\n');
   fs.writeFileSync(path.join(hooked, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\necho "lint failed" >&2\nexit 1\n', {
@@ -246,19 +246,19 @@ test('--commit: commit başarısız olursa (hook) hiçbir repo push edilmez', as
       pollMs: 50,
       commitMessage: 'x'
     }),
-    /\[ch-b-hooked\] commit atılamadı, hiçbir şey push edilmedi/
+    /\[ch-b-hooked\] commit failed, nothing was pushed/
   );
   assert.equal(upstreamStatus(first).ahead, 1);
   assert.equal(upstreamStatus(hooked).ahead, 1);
 });
 
-test('--commit: çözülmemiş çakışması olan repo commit\'lenmez', async () => {
+test('--commit: a repo with unresolved conflicts is not committed', async () => {
   const repo = makeRepo('cu', 'conflict', OK_BUMP);
   g(['checkout', '-q', '-b', 'other', 'HEAD~1'], repo);
   fs.writeFileSync(path.join(repo, 'own.txt'), 'other side\n');
   g(['commit', '-aqm', 'other'], repo);
   g(['checkout', '-q', 'main'], repo);
-  spawnSync('git', ['merge', 'other'], { cwd: repo, encoding: 'utf8' }); // çakışır, MERGE_HEAD kalır
+  spawnSync('git', ['merge', 'other'], { cwd: repo, encoding: 'utf8' }); // conflicts, MERGE_HEAD remains
 
   const config = resolveConfig({ notifications: false, defaults: { debounceMs: 50 }, repos: [] });
   const result = await runCascade({
@@ -268,7 +268,7 @@ test('--commit: çözülmemiş çakışması olan repo commit\'lenmez', async ()
     pollMs: 50,
     commitMessage: 'x'
   });
-  // merge ortasındaki repo zaten kapsam dışı bırakılır; hiçbir commit atılmaz
+  // a repo in the middle of a merge is already out of scope; nothing is committed
   assert.deepEqual(result.committed, []);
   assert.equal(result.skipped.length, 1);
   assert.match(g(['status', '--porcelain'], repo), /UU own\.txt/);

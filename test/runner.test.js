@@ -22,19 +22,19 @@ function g(args, cwd) {
   return r.stdout.trim();
 }
 
-test('rejectReason: manual tetikleyici her zaman kabul edilir', () => {
+test('rejectReason: the manual trigger is always accepted', () => {
   const target = { triggers: ['push'], branches: ['main'] };
   assert.equal(rejectReason(target, { trigger: 'manual' }), null);
   assert.equal(targetAccepts(target, { trigger: 'manual' }), true);
 });
 
-test('rejectReason: tetikleyici tipi kapalıysa reddeder', () => {
+test('rejectReason: rejects a trigger type that is disabled', () => {
   const target = { triggers: ['push'], branches: [] };
-  assert.match(rejectReason(target, { trigger: 'fetch' }), /tetikleyici 'fetch'/);
+  assert.match(rejectReason(target, { trigger: 'fetch' }), /trigger 'fetch'/);
   assert.equal(targetAccepts(target, { trigger: 'fetch' }), false);
 });
 
-test('rejectReason: branch listede değilse reddeder, boş listede her branch geçer', () => {
+test('rejectReason: rejects a branch that is not listed, an empty list accepts every branch', () => {
   const target = { triggers: ['push'], branches: ['main'] };
   assert.match(rejectReason(target, { trigger: 'push', branch: 'develop' }), /branch 'develop'/);
   assert.equal(rejectReason(target, { trigger: 'push', branch: 'main' }), null);
@@ -43,7 +43,7 @@ test('rejectReason: branch listede değilse reddeder, boş listede her branch ge
   assert.equal(rejectReason(noBranchFilter, { trigger: 'push', branch: 'anything' }), null);
 });
 
-test('runTarget: AbortSignal ile iptal edilen komut "failed" sonuçlanır ve kilit bırakılır', async () => {
+test('runTarget: a command cancelled via AbortSignal ends as "failed" and the lock is released', async () => {
   const target = path.join(dir, 'abort-target');
   fs.mkdirSync(target);
   g(['init', '-q', '-b', 'main'], target);
@@ -58,7 +58,7 @@ test('runTarget: AbortSignal ile iptal edilen komut "failed" sonuçlanır ve kil
     defaults: { commandTimeout: 30 },
     repos: [
       {
-        path: target, // kaynak == hedef, sadece runTarget'ı doğrudan çağırmak için
+        path: target, // source == target, only so runTarget can be called directly
         name: 'src',
         packages: [{ path: target, name: 'tgt', commands: ['sleep 5'] }]
       }
@@ -76,9 +76,9 @@ test('runTarget: AbortSignal ile iptal edilen komut "failed" sonuçlanır ve kil
   });
 
   assert.equal(result.status, 'failed');
-  assert.match(result.message, /daemon kapatıldı/);
+  assert.match(result.message, /daemon shut down/);
 
-  // kilit bırakıldı, aynı hedefe hemen yeni bir run başlatılabilir
+  // lock released, a new run can start on the same target right away
   const { acquireLock } = await import('../src/lock.js');
   const lock = await acquireLock(target, { waitTimeoutSec: 1 });
   lock.release();
@@ -87,9 +87,10 @@ test('runTarget: AbortSignal ile iptal edilen komut "failed" sonuçlanır ve kil
 let repoSeq = 0;
 
 /**
- * Hedef repo: package.json, package-lock.json ve src/a.js commit'li, working
- * tree temiz. `otherProcess`, komut çalışırken arka planda başka bir süreç
- * olarak notes.md oluşturan ve src/a.js'i düzenleyen bir betiktir (repo dışında).
+ * Target repo: package.json, package-lock.json and src/a.js are committed, the
+ * working tree is clean. `otherProcess` is a script (outside the repo) that
+ * runs in the background while the command executes, as another process that
+ * creates notes.md and edits src/a.js.
  */
 function makeTargetRepo(packageOverrides = {}) {
   const base = path.join(dir, `cp${++repoSeq}`);
@@ -105,7 +106,7 @@ function makeTargetRepo(packageOverrides = {}) {
   g(['commit', '-qm', 'init'], repo);
 
   const otherProcess = path.join(base, 'other-process.sh');
-  fs.writeFileSync(otherProcess, "echo 'not' > notes.md\necho '// başka süreç' >> src/a.js\n");
+  fs.writeFileSync(otherProcess, "echo 'not' > notes.md\necho '// other process' >> src/a.js\n");
 
   const build = (commands) => {
     const config = resolveConfig({
@@ -135,7 +136,7 @@ const porcelain = (repo) =>
     .filter(Boolean)
     .sort();
 
-test('commitPaths: komut sırasında başka sürecin oluşturduğu/düzenlediği dosyalar commit\'lenmez, yerinde kalır', async () => {
+test('commitPaths: files created/edited by another process during the command are not committed and stay in place', async () => {
   const { repo, otherProcess, build } = makeTargetRepo();
   const t = build([`${otherProcess} & echo lock-v2 > package-lock.json; wait`]);
 
@@ -144,18 +145,18 @@ test('commitPaths: komut sırasında başka sürecin oluşturduğu/düzenlediği
   assert.equal(result.status, 'committed');
   assert.deepEqual(committedFiles(repo), ['package-lock.json']);
   assert.equal(g(['show', 'HEAD:package-lock.json'], repo), 'lock-v2');
-  // başka sürecin işi working tree'de duruyor
+  // the other process's work is still in the working tree
   assert.deepEqual(porcelain(repo), [' M src/a.js', '?? notes.md']);
-  assert.match(fs.readFileSync(path.join(repo, 'src', 'a.js'), 'utf8'), /başka süreç/);
-  // uyarı hem sonuçta hem journal'da
+  assert.match(fs.readFileSync(path.join(repo, 'src', 'a.js'), 'utf8'), /other process/);
+  // the warning is in both the result and the journal
   assert.equal(result.warnings.length, 1);
-  assert.match(result.warnings[0], /commitPaths dışında.*(notes\.md.*src\/a\.js|src\/a\.js.*notes\.md)/);
+  assert.match(result.warnings[0], /outside commitPaths.*(notes\.md.*src\/a\.js|src\/a\.js.*notes\.md)/);
   const evt = readEvents({ limit: 1, filter: (r) => r.kind === 'target' && r.targetPath === repo })[0];
   assert.deepEqual([...evt.otherFiles].sort(), ['notes.md', 'src/a.js']);
   assert.deepEqual(evt.files, ['package-lock.json']);
 });
 
-test('commitPaths: yeni (takipsiz) kilit dosyası her derinlikte commit\'lenir, eşleşmeyen takipsiz dosya kalır', async () => {
+test('commitPaths: a new (untracked) lock file is committed at any depth, a non-matching untracked file stays', async () => {
   const { repo, build } = makeTargetRepo();
   const t = build(['mkdir -p packages/web && echo a > yarn.lock && echo b > packages/web/yarn.lock && echo log > install.log']);
 
@@ -166,7 +167,7 @@ test('commitPaths: yeni (takipsiz) kilit dosyası her derinlikte commit\'lenir, 
   assert.deepEqual(porcelain(repo), ['?? install.log']);
 });
 
-test('commitPaths: hedef düzeyinde verilen liste uygulanır (varsayılanın yerine geçer)', async () => {
+test('commitPaths: a list given at the target level is applied (it replaces the default)', async () => {
   const { repo, build } = makeTargetRepo({ commitPaths: ['deps.lock', 'gen/**/*.json'] });
   const t = build(['mkdir -p gen/x && echo d > deps.lock && echo j > gen/x/y.json && echo lock-v2 > package-lock.json']);
   assert.deepEqual(t.target.commitPaths, ['deps.lock', 'gen/**/*.json']);
@@ -175,12 +176,12 @@ test('commitPaths: hedef düzeyinde verilen liste uygulanır (varsayılanın yer
 
   assert.equal(result.status, 'committed');
   assert.deepEqual(committedFiles(repo), ['deps.lock', 'gen/x/y.json']);
-  // varsayılan listede olan ama özel listede olmayan dosya commit'lenmedi, dokunulmadı
+  // a file on the default list but not on the custom list was neither committed nor touched
   assert.deepEqual(porcelain(repo), [' M package-lock.json']);
   assert.match(result.warnings[0], /package-lock\.json/);
 });
 
-test('commitPaths: yalnızca eşleşmeyen dosyalar değişirse sonuç "unchanged" olur, uyarı verilir', async () => {
+test('commitPaths: if only non-matching files change, the result is "unchanged" with a warning', async () => {
   const { repo, otherProcess, build } = makeTargetRepo();
   const t = build([`${otherProcess}`]);
   const head = g(['rev-parse', 'HEAD'], repo);
@@ -193,7 +194,7 @@ test('commitPaths: yalnızca eşleşmeyen dosyalar değişirse sonuç "unchanged
   assert.deepEqual(porcelain(repo), [' M src/a.js', '?? notes.md']);
 });
 
-test('commitPaths: başarısız komut yalnızca kilit dosyasını geri alır, başka sürecin src/a.js düzenlemesine dokunmaz', async () => {
+test('commitPaths: a failed command reverts only the lock file and leaves the other process\'s src/a.js edit alone', async () => {
   const { repo, otherProcess, build } = makeTargetRepo();
   const t = build([`${otherProcess} & echo lock-v2 > package-lock.json; wait; exit 3`]);
   const head = g(['rev-parse', 'HEAD'], repo);
@@ -201,15 +202,15 @@ test('commitPaths: başarısız komut yalnızca kilit dosyasını geri alır, ba
   const result = await run(t, repo);
 
   assert.equal(result.status, 'failed');
-  assert.match(result.message, /çıkış kodu 3/);
+  assert.match(result.message, /exit code 3/);
   assert.equal(g(['rev-parse', 'HEAD'], repo), head);
-  assert.equal(fs.readFileSync(path.join(repo, 'package-lock.json'), 'utf8'), 'lock-v1\n'); // geri alındı
-  assert.match(fs.readFileSync(path.join(repo, 'src', 'a.js'), 'utf8'), /başka süreç/); // korundu
+  assert.equal(fs.readFileSync(path.join(repo, 'package-lock.json'), 'utf8'), 'lock-v1\n'); // reverted
+  assert.match(fs.readFileSync(path.join(repo, 'src', 'a.js'), 'utf8'), /other process/); // preserved
   assert.ok(fs.existsSync(path.join(repo, 'notes.md')));
   assert.match(result.warnings[0], /src\/a\.js/);
 });
 
-test('commitPaths: dry-run yalnızca kilit dosyasını geri alır, başka sürecin değişikliklerine dokunmaz', async () => {
+test('commitPaths: dry-run reverts only the lock file and leaves the other process\'s changes alone', async () => {
   const { repo, otherProcess, build } = makeTargetRepo();
   const t = build([`${otherProcess} & echo lock-v2 > package-lock.json; wait`]);
   const head = g(['rev-parse', 'HEAD'], repo);

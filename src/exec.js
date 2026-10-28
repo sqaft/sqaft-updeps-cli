@@ -127,7 +127,7 @@ export function git(args, cwd, fallback = '') {
 export function gitOrThrow(args, cwd) {
   const res = spawnSync('git', args, { cwd, encoding: 'utf8' });
   if (res.status !== 0) {
-    throw new Error(`git ${args.join(' ')} başarısız: ${(res.stderr || '').trim()}`);
+    throw new Error(`git ${args.join(' ')} failed: ${(res.stderr || '').trim()}`);
   }
   return (res.stdout || '').trim();
 }

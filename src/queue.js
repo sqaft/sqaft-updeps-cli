@@ -95,7 +95,7 @@ export class UpdateQueue {
     const state = loadState();
     const prev = state.repos[sourcePath];
     if (event.sha && prev && prev.lastProcessedSha === event.sha) {
-      logger.debug(`[${sourceRepo.name}] sha ${event.sha.slice(0, 7)} zaten işlendi, atlanıyor`);
+      logger.debug(`[${sourceRepo.name}] sha ${event.sha.slice(0, 7)} already processed, skipping`);
       return;
     }
 
@@ -104,7 +104,7 @@ export class UpdateQueue {
 
     const debounceMs = this.config.defaults.debounceMs ?? 3000;
     logger.info(
-      `[${sourceRepo.name}] olay: ${event.trigger} ${(event.sha || '').slice(0, 7)} ` +
+      `[${sourceRepo.name}] event: ${event.trigger} ${(event.sha || '').slice(0, 7)} ` +
         `(${debounceMs}ms debounce)`
     );
 
@@ -176,7 +176,7 @@ export class UpdateQueue {
         existing.sources.set(source.path, source);
         existing.groupIds.add(groupId);
         group.remaining++;
-        logger.debug(`[${target.name}] bekleyen işe birleştirildi (kaynak: ${sourceRepo.name})`);
+        logger.debug(`[${target.name}] merged into pending job (source: ${sourceRepo.name})`);
       } else {
         this.ready.push({
           targetPath: target.path,
@@ -235,7 +235,7 @@ export class UpdateQueue {
       await Promise.race([
         this.activeProcessPromise,
         sleep(timeoutMs).then(() =>
-          logger.warn('Kapatma zaman aşımına uğradı, aktif iş beklenmeden çıkılıyor.')
+          logger.warn('Shutdown timed out, exiting without waiting for the active job.')
         )
       ]);
     }
@@ -248,7 +248,7 @@ export class UpdateQueue {
         trigger: { trigger: 'shutdown', sourceName: [...job.sources.values()][0]?.name || '' },
         group: groupId,
         status: 'skipped',
-        rawMessage: 'daemon kapatıldı, çalıştırılmadı'
+        rawMessage: 'daemon shut down, not run'
       });
       this._applyResult(job, result);
     }
@@ -323,13 +323,13 @@ export class UpdateQueue {
 
     let result;
     if (!currentTarget) {
-      logger.warn(`[${job.target.name}] hedef config'ten kaldırılmış, atlanıyor`);
+      logger.warn(`[${job.target.name}] target was removed from the config, skipping`);
       result = recordTargetResult({
         target: job.target,
         trigger,
         group: primaryGroup,
         status: 'skipped',
-        rawMessage: "hedef config'ten kaldırıldı, çalıştırılmadı",
+        rawMessage: 'target was removed from the config, not run',
         extra: extraGroups.length ? { groups: [primaryGroup, ...extraGroups] } : {}
       });
     } else {
@@ -343,7 +343,7 @@ export class UpdateQueue {
           signal
         });
       } catch (err) {
-        logger.error(`[${job.target.name}] kuyruk hatası: ${err.message}`);
+        logger.error(`[${job.target.name}] queue error: ${err.message}`);
         result = { status: 'failed', target: job.target.name, message: err.message };
       }
     }
@@ -370,13 +370,13 @@ export class UpdateQueue {
         tally: group.tally
       });
     } catch (err) {
-      logger.error(`group_done kaydı hatası: ${err.message}`);
+      logger.error(`failed to record group_done: ${err.message}`);
     }
 
     try {
       this.onGroupDone({ title: group.title, tally: group.tally });
     } catch (err) {
-      logger.error(`onGroupDone hatası: ${err.message}`);
+      logger.error(`onGroupDone error: ${err.message}`);
     }
   }
 

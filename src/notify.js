@@ -35,7 +35,7 @@ function hasTerminalNotifier() {
  * @returns {string[]}
  */
 export function terminalNotifierArgs({ type, title, message }) {
-  const subtitle = type === 'fail' ? '❌ hata var' : '✅ tamamlandı';
+  const subtitle = type === 'fail' ? '❌ failed' : '✅ done';
   const sound = type === 'fail' ? 'Basso' : 'Glass';
   return ['-title', title, '-subtitle', subtitle, '-message', message, '-sound', sound];
 }
@@ -54,7 +54,7 @@ export function sendNotification({ type, title, message, enabled = true }) {
   title = redact(title);
   message = redact(message);
 
-  const subtitle = type === 'fail' ? '❌ hata var' : '✅ tamamlandı';
+  const subtitle = type === 'fail' ? '❌ failed' : '✅ done';
   const sound = type === 'fail' ? 'Basso' : 'Glass';
 
   try {
@@ -67,7 +67,7 @@ export function sendNotification({ type, title, message, enabled = true }) {
       `subtitle ${asString(subtitle)} sound name ${asString(sound)}`;
     spawnDetached('osascript', ['-e', script]);
   } catch (err) {
-    logger.debug(`Bildirim gönderilemedi: ${err.message}`);
+    logger.debug(`Could not send notification: ${err.message}`);
   }
 }
 

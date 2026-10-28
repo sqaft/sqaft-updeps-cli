@@ -12,38 +12,38 @@ function fail(message) {
 
 /** Prints the repos in scope and the rounds a real run would take. */
 function printPlan(infos, graph) {
-  console.log(styleText('bold', `Kapsam (${infos.length} repo)`));
+  console.log(styleText('bold', `Scope (${infos.length} ${infos.length === 1 ? 'repo' : 'repos'})`));
   for (const i of infos) {
     const where = styleText('dim', tildify(i.path));
     if (i.skip) {
-      console.log(`  ${styleText('dim', '–')} ${i.label}  ${styleText('yellow', `atlandı: ${i.skip}`)}  ${where}`);
+      console.log(`  ${styleText('dim', '–')} ${i.label}  ${styleText('yellow', `skipped: ${i.skip}`)}  ${where}`);
     } else if (i.ahead > 0) {
-      const tag = i.watched ? '' : styleText('dim', ' · daemon izlemiyor');
-      const fresh = i.pendingFiles ? styleText('yellow', ` + ${i.pendingFiles} dosya commit'lenecek`) : '';
+      const tag = i.watched ? '' : styleText('dim', ' · not watched by daemon');
+      const fresh = i.pendingFiles ? styleText('yellow', ` + ${i.pendingFiles} ${i.pendingFiles === 1 ? 'file' : 'files'} to commit`) : '';
       const commits = i.ahead - (i.pendingFiles ? 1 : 0);
       console.log(
-        `  ${styleText('cyan', '↑')} ${i.label}  ${commits > 0 ? `${commits} commit` : 'yeni commit'}${fresh} → ${i.remote}/${i.remoteBranch}${tag}  ${where}`
+        `  ${styleText('cyan', '↑')} ${i.label}  ${commits > 0 ? `${commits} ${commits === 1 ? 'commit' : 'commits'}` : 'new commit'}${fresh} → ${i.remote}/${i.remoteBranch}${tag}  ${where}`
       );
     } else {
-      console.log(`  ${styleText('dim', '·')} ${styleText('dim', `${i.label}  güncel  ${where}`)}`);
+      console.log(`  ${styleText('dim', '·')} ${styleText('dim', `${i.label}  up to date  ${where}`)}`);
     }
   }
   console.log('');
 
   const rounds = planRounds(infos, graph);
   if (rounds.length === 0) {
-    console.log('Push edilecek commit yok.');
+    console.log('No commits to push.');
     return;
   }
-  console.log(styleText('bold', 'Tahmini turlar'));
+  console.log(styleText('bold', 'Estimated rounds'));
   const label = (p) => path.basename(p);
   rounds.forEach((round, i) => {
     if (round.stuck) {
-      console.log(`  ${styleText('red', '✗')} sıra belirlenemedi (bağımlılık döngüsü?): ${round.stuck.map(label).join(', ')}`);
+      console.log(`  ${styleText('red', '✗')} cannot determine order (dependency cycle?): ${round.stuck.map(label).join(', ')}`);
       return;
     }
-    const names = round.repos.map((r) => (r.certain ? label(r.path) : `${label(r.path)} ${styleText('dim', '(olası)')}`));
-    console.log(`  Tur ${i + 1}: ${names.join(', ')}`);
+    const names = round.repos.map((r) => (r.certain ? label(r.path) : `${label(r.path)} ${styleText('dim', '(possible)')}`));
+    console.log(`  Round ${i + 1}: ${names.join(', ')}`);
   });
 }
 
@@ -57,11 +57,11 @@ function printPlan(infos, graph) {
  */
 export async function cmdPush(opts = {}) {
   const commitMessage = opts.commit;
-  if (commitMessage !== undefined && commitMessage.trim() === '') fail('--commit için boş olmayan bir commit mesajı ver.');
+  if (commitMessage !== undefined && commitMessage.trim() === '') fail('--commit needs a non-empty commit message.');
 
   const config = loadConfig();
   const repos = discoverRepos(process.cwd());
-  if (repos.length === 0) fail('Bu dizin bir git reposunda değil ve hemen altında git reposu yok.');
+  if (repos.length === 0) fail('This directory is not inside a git repository and has no git repositories directly below it.');
 
   const graph = buildGraph(config);
 
@@ -79,9 +79,9 @@ export async function cmdPush(opts = {}) {
     return;
   }
 
-  if (!runningDaemonPid()) fail('Daemon çalışmıyor: push edilen değişiklikler işlenmez. "updeps start" ile başlat.');
+  if (!runningDaemonPid()) fail('The daemon is not running: pushed changes will not be processed. Start it with "updeps start".');
   if (daemonCodeStale()) {
-    console.error(styleText('yellow', '⚠ daemon eski kodla çalışıyor — "updeps restart" önerilir.'));
+    console.error(styleText('yellow', '⚠ the daemon is running outdated code — "updeps restart" is recommended.'));
   }
 
   const tty = Boolean(process.stdout.isTTY);
@@ -97,7 +97,7 @@ export async function cmdPush(opts = {}) {
     if (tty) {
       clearLine();
       if (text) process.stdout.write(styleText('dim', text));
-    } else if (text && text !== lastProgress && !text.startsWith('tamamlanıyor')) {
+    } else if (text && text !== lastProgress && !text.startsWith('finishing')) {
       console.log(styleText('dim', `  ${text}`));
     }
     lastProgress = text;
@@ -120,22 +120,22 @@ export async function cmdPush(opts = {}) {
   clearLine();
 
   for (const s of result.skipped) {
-    console.log(styleText('yellow', `atlandı: ${s.label} — ${s.skip}`));
+    console.log(styleText('yellow', `skipped: ${s.label} — ${s.skip}`));
   }
 
   if (result.failed.length > 0) {
     console.error(
-      styleText('red', `\nDaemon ${result.failed.length} hedefi güncelleyemedi, durduruldu. Düzeltip "updeps push" ile devam et.`)
+      styleText('red', `\nThe daemon failed to update ${result.failed.length} target(s), stopped. Fix the problem and continue with "updeps push".`)
     );
-    console.error(styleText('dim', '  Detay: "updeps status" · "updeps show <hedef>"'));
+    console.error(styleText('dim', '  Details: "updeps status" · "updeps show <target>"'));
     process.exit(1);
   }
 
   const pushes = result.rounds.reduce((n, r) => n + r.pushed.length, 0);
-  const commits = result.committed.length > 0 ? `${result.committed.length} repo commit'lendi, ` : '';
+  const commits = result.committed.length > 0 ? `${result.committed.length} repos committed, ` : '';
   console.log(
     pushes === 0
-      ? 'Push edilecek commit yok.'
-      : styleText('green', `✓ Tamam: ${commits}${result.rounds.length} tur, ${pushes} push.`)
+      ? 'No commits to push.'
+      : styleText('green', `✓ Done: ${commits}${result.rounds.length} rounds, ${pushes} pushes.`)
   );
 }

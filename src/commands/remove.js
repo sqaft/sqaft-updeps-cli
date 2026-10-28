@@ -11,7 +11,7 @@ import { validateConfig } from '../config.js';
 export function cmdRemove(positionals) {
   const [sourceSel, targetSel] = positionals;
   if (!sourceSel) {
-    console.error('Kullanım: updeps remove <kaynak> [hedef]');
+    console.error('Usage: updeps remove <source> [target]');
     process.exit(1);
   }
 
@@ -20,13 +20,13 @@ export function cmdRemove(positionals) {
 
   const repoIdx = raw.repos.findIndex((r) => r.path === sourceSel || r.name === sourceSel);
   if (repoIdx === -1) {
-    console.error(styleText('red', `Kaynak bulunamadı: ${sourceSel}`));
+    console.error(styleText('red', `Source not found: ${sourceSel}`));
     process.exit(1);
   }
 
   if (!targetSel) {
     const [removed] = raw.repos.splice(repoIdx, 1);
-    console.log(styleText('green', `Kaynak silindi: ${removed.name || removed.path}`));
+    console.log(styleText('green', `Source removed: ${removed.name || removed.path}`));
   } else {
     const repo = raw.repos[repoIdx];
     const before = (repo.packages || []).length;
@@ -34,10 +34,10 @@ export function cmdRemove(positionals) {
       (p) => p.path !== targetSel && p.name !== targetSel
     );
     if (repo.packages.length === before) {
-      console.error(styleText('red', `Hedef bulunamadı: ${targetSel}`));
+      console.error(styleText('red', `Target not found: ${targetSel}`));
       process.exit(1);
     }
-    console.log(styleText('green', `Hedef silindi: ${targetSel}`));
+    console.log(styleText('green', `Target removed: ${targetSel}`));
   }
 
   validateConfig(raw);

@@ -25,7 +25,7 @@ export async function cmdRun(positionals, opts = {}) {
       (r) => r.name === selector || r.path === resolved || path.basename(r.path) === selector
     );
     if (sources.length === 0) {
-      console.error(styleText('red', `Kaynak repo bulunamadı: ${selector}`));
+      console.error(styleText('red', `Source repo not found: ${selector}`));
       process.exit(1);
     }
   }

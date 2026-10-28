@@ -21,7 +21,7 @@ export async function cmdRetry(positionals, opts = {}) {
 
   let failures = state.openFailures;
   if (!opts.failed && !selector) {
-    console.error('Kullanım: updeps retry --failed   |   updeps retry <hedef|kaynak>');
+    console.error('Usage: updeps retry --failed   |   updeps retry <target|source>');
     process.exit(1);
   }
   if (selector) {
@@ -29,7 +29,7 @@ export async function cmdRetry(positionals, opts = {}) {
   }
 
   if (failures.length === 0) {
-    console.log(styleText('green', 'Yeniden denenecek açık hata yok.'));
+    console.log(styleText('green', 'No open failures to retry.'));
     return;
   }
 
@@ -39,7 +39,7 @@ export async function cmdRetry(positionals, opts = {}) {
     const sourceRepo = config.repos.find((r) => r.name === f.source || r.path === f.source);
     const target = sourceRepo?.packages.find((p) => p.path === f.targetPath || p.name === f.target);
     if (!sourceRepo || !target) {
-      console.log(styleText('yellow', `  atlandı (config'de yok): ${f.source} → ${f.target}`));
+      console.log(styleText('yellow', `  skipped (not in config): ${f.source} → ${f.target}`));
       continue;
     }
     jobs.push({ sourceRepo, target, failure: f });
@@ -55,7 +55,7 @@ export async function cmdRetry(positionals, opts = {}) {
     targetCount: jobs.length
   });
 
-  console.log(styleText('bold', `${jobs.length} hata yeniden deneniyor...`));
+  console.log(styleText('bold', `Retrying ${jobs.length} failure(s)...`));
   const results = [];
   for (const { sourceRepo, target } of jobs) {
     const sha = git(['rev-parse', 'HEAD'], sourceRepo.path, '');
@@ -91,10 +91,10 @@ export async function cmdRetry(positionals, opts = {}) {
   notifyRunGroup({ notifications: config.notifications, title: 'updeps: retry', tally });
 
   const stillFailed = tally.failed
-    ? styleText('red', `${tally.failed} hâlâ hatalı`)
-    : `${tally.failed} hâlâ hatalı`;
+    ? styleText('red', `${tally.failed} failed`)
+    : `${tally.failed} failed`;
   console.log(
-    `\n${tally.committed} commit, ${tally.unchanged} güncel, ${stillFailed}, ${tally.skipped} atlandı`
+    `\n${tally.committed} committed, ${tally.unchanged} up to date, ${stillFailed}, ${tally.skipped} skipped`
   );
   if (tally.failed > 0) process.exitCode = 1;
 }

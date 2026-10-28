@@ -19,7 +19,7 @@ test.beforeEach(() => {
 });
 test.after(cleanup);
 
-test('append + read newest-first, ts eklenir', () => {
+test('append + read newest-first, ts is added', () => {
   appendEvent({ kind: 'target', target: 'a', status: 'committed' });
   appendEvent({ kind: 'target', target: 'b', status: 'failed' });
   const events = readEvents();
@@ -28,7 +28,7 @@ test('append + read newest-first, ts eklenir', () => {
   assert.ok(events[0].ts);
 });
 
-test('filter ve limit', () => {
+test('filter and limit', () => {
   for (let i = 0; i < 10; i++) {
     appendEvent({ kind: 'target', target: `t${i}`, status: i % 2 ? 'failed' : 'committed' });
   }
@@ -38,18 +38,18 @@ test('filter ve limit', () => {
   assert.equal(limited.length, 3);
 });
 
-test('bozuk satır atlanır', () => {
+test('a corrupt line is skipped', () => {
   appendEvent({ kind: 'target', target: 'ok' });
-  fs.appendFileSync(path.join(dir, 'sqaft-updeps', 'journal.jsonl'), '{bozuk\n');
+  fs.appendFileSync(path.join(dir, 'sqaft-updeps', 'journal.jsonl'), '{corrupt\n');
   appendEvent({ kind: 'target', target: 'ok2' });
   const events = readEvents();
   assert.deepEqual(events.map((e) => e.target), ['ok2', 'ok']);
 });
 
-test('parseSince göreli ve ISO', () => {
+test('parseSince relative and ISO', () => {
   const now = Date.now();
   assert.ok(Math.abs(parseSince('1h') - (now - 3600_000)) < 2000);
   assert.ok(Math.abs(parseSince('2d') - (now - 172800_000)) < 2000);
   assert.equal(parseSince('2026-01-01'), Date.parse('2026-01-01'));
-  assert.equal(parseSince('çöp'), 0);
+  assert.equal(parseSince('garbage'), 0);
 });

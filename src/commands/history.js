@@ -9,10 +9,10 @@ const STATUS_STYLE = {
 };
 
 const STATUS_LABEL = {
-  committed: 'commit',
-  unchanged: 'güncel',
-  skipped: 'atlandı',
-  failed: 'HATA'
+  committed: 'committed',
+  unchanged: 'up to date',
+  skipped: 'skipped',
+  failed: 'FAILED'
 };
 
 /** @param {string} iso */
@@ -49,17 +49,17 @@ export function cmdHistory(opts = {}) {
   }
 
   if (records.length === 0) {
-    console.log(styleText('dim', 'Kayıt yok.'));
+    console.log(styleText('dim', 'No records.'));
     return;
   }
 
   for (const r of records) {
     const st = (STATUS_STYLE[r.status] || ((s) => s))(STATUS_LABEL[r.status] || r.status);
     const time = styleText('dim', shortTime(r.ts).padEnd(11));
-    const d = styleText('dim', `${Math.round((r.durationMs || 0) / 1000)}sn`);
+    const d = styleText('dim', `${Math.round((r.durationMs || 0) / 1000)}s`);
     const arrow = `${r.source} ${styleText('dim', '→')} ${r.target}`;
     const sha = r.sourceSha ? styleText('dim', ` ${r.sourceSha.slice(0, 7)}`) : '';
-    console.log(`${time} ${st.padEnd(6)} ${arrow}${sha} ${d}`);
+    console.log(`${time} ${st.padEnd(10)} ${arrow}${sha} ${d}`);
     if (r.status === 'failed') {
       console.log(`  ${styleText('red', r.message)}`);
       if (r.errorTail) {
@@ -72,6 +72,6 @@ export function cmdHistory(opts = {}) {
   }
 
   console.log(
-    styleText('dim', `\n${records.length} kayıt · daha fazlası için -n · sadece hatalar: --failed · JSON: --json`)
+    styleText('dim', `\n${records.length} record(s) · more: -n · failures only: --failed · JSON: --json`)
   );
 }

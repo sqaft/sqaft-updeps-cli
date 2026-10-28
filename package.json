@@ -1,9 +1,36 @@
 {
   "name": "@sqaft/updeps-cli",
-  "version": "0.1.0",
-  "description": "Bir paket push edildiğinde onu bağımlılık olarak kullanan repoları otomatik güncelleyen, dil ve paket yöneticisi bağımsız macOS CLI + arka plan servisi",
+  "version": "0.0.2",
+  "description": "Automatically update the repos that depend on a package whenever it is pushed: a language- and package-manager-agnostic macOS CLI and launchd daemon.",
+  "keywords": [
+    "dependencies",
+    "dependency-updates",
+    "polyrepo",
+    "multi-repo",
+    "git",
+    "push",
+    "lockfile",
+    "launchd",
+    "macos",
+    "cli",
+    "automation",
+    "npm",
+    "composer"
+  ],
+  "homepage": "https://github.com/sqaft/sqaft-updeps-cli#readme",
+  "bugs": {
+    "url": "https://github.com/sqaft/sqaft-updeps-cli/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sqaft/sqaft-updeps-cli.git"
+  },
+  "author": "sqaft",
+  "license": "MIT",
   "type": "module",
-  "main": "src/index.js",
+  "exports": {
+    "./package.json": "./package.json"
+  },
   "bin": {
     "updeps": "./bin/updeps.js",
     "sqaft-updeps": "./bin/updeps.js"
@@ -15,7 +42,8 @@
   ],
   "scripts": {
     "test": "node --test --test-force-exit 'test/*.test.js'",
-    "start": "node bin/updeps.js daemon"
+    "start": "node bin/updeps.js daemon",
+    "prepublishOnly": "npm test"
   },
   "dependencies": {
     "chokidar": "^4.0.3"
@@ -26,5 +54,7 @@
   "os": [
     "darwin"
   ],
-  "license": "MIT"
+  "publishConfig": {
+    "access": "public"
+  }
 }

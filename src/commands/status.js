@@ -1,45 +1,83 @@
 import { styleText } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { agentStatus } from '../daemon.js';
+import { agentStatus, minNodeMajor } from '../daemon.js';
+import { tildify } from '../paths.js';
 
 /** @param {number} ts */
 function ago(ts) {
-  if (!ts) return 'hiç';
+  if (!ts) return 'never';
   const s = Math.round((Date.now() - ts) / 1000);
-  if (s < 60) return `${s}sn önce`;
-  if (s < 3600) return `${Math.round(s / 60)}dk önce`;
-  if (s < 86400) return `${Math.round(s / 3600)}sa önce`;
-  return `${Math.round(s / 86400)}g önce`;
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
 }
 
 /** @param {number} ms */
 function dur(ms) {
   if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}sn`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * Warning for a launchd agent whose Node or CLI is missing, too old, or belongs to another install.
+ * @param {ReturnType<typeof agentStatus>['agent']} agent
+ * @returns {string|null}
+ */
+export function agentProblemLine(agent) {
+  switch (agent.problem) {
+    case 'node-missing':
+      return styleText(
+        'red',
+        '  ✗ the daemon cannot start: ' +
+          (agent.node ? `Node binary not found: ${tildify(agent.node)}` : '"node" not found on its PATH') +
+          ' — put a supported Node first on PATH and run "updeps restart"'
+      );
+    case 'node-too-old':
+      return styleText(
+        'red',
+        `  ✗ the daemon cannot run: Node ${agent.nodeVersion} (${tildify(agent.node)}) is older than the required ` +
+          `v${minNodeMajor()} — put a supported Node first on PATH and run "updeps restart"`
+      );
+    case 'bin-missing':
+      return styleText(
+        'red',
+        `  ✗ the daemon cannot start: CLI not found: ${tildify(agent.bin || '')} — run "updeps restart"`
+      );
+    case 'different-install':
+      return styleText(
+        'yellow',
+        `  ⚠ the agent runs another install (${tildify(agent.bin)}) — run "updeps restart" to use this one`
+      );
+    default:
+      return null;
+  }
 }
 
 function render() {
-  const { agentInstalled, daemonPid, daemonStale, state } = agentStatus();
+  const { agentInstalled, agent, daemonPid, daemonStale, state } = agentStatus();
   const L = [];
 
   L.push(styleText('bold', 'Daemon'));
-  L.push(`  launchd agent : ${agentInstalled ? styleText('green', 'kurulu') : styleText('dim', 'kurulu değil')}`);
+  L.push(`  launchd agent : ${agentInstalled ? styleText('green', 'installed') : styleText('dim', 'not installed')}`);
   L.push(
-    `  süreç         : ${daemonPid ? styleText('green', `çalışıyor (pid ${daemonPid})`) : styleText('yellow', 'çalışmıyor')}`
+    `  process       : ${daemonPid ? styleText('green', `running (pid ${daemonPid})`) : styleText('yellow', 'not running')}`
   );
   if (state.daemon?.startedAt) {
-    L.push(`  başlangıç     : ${ago(state.daemon.startedAt)}`);
-    L.push(`  izlenen repo  : ${state.daemon.watchedRepos}`);
+    L.push(`  started       : ${ago(state.daemon.startedAt)}`);
+    L.push(`  watched repos : ${state.daemon.watchedRepos}`);
   }
   if (daemonStale) {
     L.push(
-      styleText('yellow', '  ⚠ kod dosyaları daemon başladıktan sonra değişti — "updeps restart" gerekli')
+      styleText('yellow', '  ⚠ code changed since the daemon started — run "updeps restart"')
     );
   }
+  const problemLine = agentProblemLine(agent);
+  if (problemLine) L.push(problemLine);
   L.push('');
 
   // What's running right now
-  L.push(styleText('bold', 'Şu an'));
+  L.push(styleText('bold', 'Now'));
   const active = state.activeRun;
   const jobs = state.queue.jobs;
   if (active) {
@@ -50,7 +88,7 @@ function render() {
     );
   }
   if (jobs.length > 0) {
-    L.push(styleText('dim', `  kuyrukta (${jobs.length}):`));
+    L.push(styleText('dim', `  queued (${jobs.length}):`));
     for (const j of jobs.slice(0, 15)) {
       const from = j.sources?.length ? styleText('dim', ` ← ${j.sources.join(', ')}`) : '';
       L.push(`  ${styleText('dim', '·')} ${j.target}${from}`);
@@ -58,33 +96,33 @@ function render() {
     if (jobs.length > 15) L.push(styleText('dim', `  … +${jobs.length - 15}`));
   }
   if (!active && jobs.length === 0) {
-    L.push(styleText('dim', '  boşta'));
+    L.push(styleText('dim', '  idle'));
   }
   L.push('');
 
   // Open failures (persist until resolved)
   const failures = state.openFailures;
-  L.push(styleText('bold', failures.length ? styleText('red', `Açık hatalar (${failures.length})`) : 'Açık hatalar'));
+  L.push(styleText('bold', failures.length ? styleText('red', `Open failures (${failures.length})`) : 'Open failures'));
   if (failures.length === 0) {
-    L.push(styleText('green', '  ✓ yok'));
+    L.push(styleText('green', '  ✓ none'));
   } else {
     for (const f of failures.slice(0, 15)) {
       const times = f.count > 1 ? styleText('dim', ` ×${f.count}`) : '';
       L.push(`  ${styleText('red', '✗')} ${f.source} → ${f.target}${times}  ${styleText('dim', ago(f.lastSeen))}`);
       L.push(`      ${styleText('dim', f.message)}`);
     }
-    L.push(styleText('dim', '  → "updeps retry --failed" ile hepsini yeniden dene · "updeps show <hedef>" detay'));
+    L.push(styleText('dim', '  → "updeps retry --failed" retries all · "updeps show <target>" for details'));
   }
   L.push('');
 
   // Recent run groups
-  L.push(styleText('bold', 'Son çalışmalar'));
+  L.push(styleText('bold', 'Recent runs'));
   const runs = state.lastRuns.slice(0, 10);
-  if (runs.length === 0) L.push(styleText('dim', '  yok'));
+  if (runs.length === 0) L.push(styleText('dim', '  none'));
   for (const r of runs) {
-    const bits = [`${r.committed} commit`, `${r.unchanged} güncel`];
-    if (r.failed) bits.push(styleText('red', `${r.failed} hata`));
-    if (r.skipped) bits.push(styleText('dim', `${r.skipped} atlandı`));
+    const bits = [`${r.committed} committed`, `${r.unchanged} up to date`];
+    if (r.failed) bits.push(styleText('red', `${r.failed} failed`));
+    if (r.skipped) bits.push(styleText('dim', `${r.skipped} skipped`));
     L.push(
       `  ${ago(r.timestamp).padEnd(9)} ${r.sourceRepo} ${styleText('dim', `(${r.trigger} ${r.sha})`)} → ${bits.join(', ')}`
     );
@@ -109,7 +147,7 @@ export async function cmdStatus(opts = {}) {
   process.stdout.write('\x1b[?25l'); // hide cursor
   for (;;) {
     process.stdout.write('\x1b[2J\x1b[H'); // clear + home
-    console.log(styleText('dim', `updeps status --watch · ${new Date().toLocaleTimeString()} · Ctrl-C çıkış`));
+    console.log(styleText('dim', `updeps status --watch · ${new Date().toLocaleTimeString()} · Ctrl-C to exit`));
     console.log('');
     console.log(render());
     await sleep(1000);

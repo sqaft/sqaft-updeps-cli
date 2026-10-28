@@ -24,37 +24,37 @@ function graphOf(edges) {
 const p = (name) => `/work/${name}`;
 const names = (paths) => paths.map((x) => path.basename(x)).sort();
 
-test('pickPushable: zincirde yalnızca en üstteki repo push edilir', () => {
+test('pickPushable: only the topmost repo of a chain is pushed', () => {
   const g = graphOf([['a', 'b'], ['b', 'c']]);
   assert.deepEqual(names(pickPushable([p('a'), p('b'), p('c')], g)), ['a']);
   assert.deepEqual(names(pickPushable([p('b'), p('c')], g)), ['b']);
   assert.deepEqual(names(pickPushable([p('c')], g)), ['c']);
 });
 
-test('pickPushable: ara düğüm ahead değilse de transitif ata engeller', () => {
+test('pickPushable: a transitive ancestor blocks even when the middle node is not ahead', () => {
   const g = graphOf([['a', 'b'], ['b', 'c']]);
   assert.deepEqual(names(pickPushable([p('a'), p('c')], g)), ['a']);
 });
 
-test('pickPushable: elmasta ortak hedef en sona kalır', () => {
+test('pickPushable: the shared target of a diamond goes last', () => {
   const g = graphOf([['a', 'b'], ['a', 'c'], ['b', 'd'], ['c', 'd']]);
   assert.deepEqual(names(pickPushable([p('a'), p('b'), p('c'), p('d')], g)), ['a']);
   assert.deepEqual(names(pickPushable([p('b'), p('c'), p('d')], g)), ['b', 'c']);
 });
 
-test('pickPushable: ilişkisiz repo hemen push edilir', () => {
+test('pickPushable: an unrelated repo is pushed right away', () => {
   const g = graphOf([['a', 'b']]);
   assert.deepEqual(names(pickPushable([p('a'), p('b'), p('z')], g)), ['a', 'z']);
 });
 
-test('pickPushable: yalnızca engelleyen (daemon izleyen) atalar bekletir', () => {
+test('pickPushable: only blocking (daemon-watched) ancestors hold a repo back', () => {
   const g = graphOf([['a', 'b']]);
   const ahead = [p('a'), p('b')];
   assert.deepEqual(names(pickPushable(ahead, g, new Set())), ['a', 'b']);
   assert.deepEqual(names(pickPushable(ahead, g, new Set([p('a')]))), ['a']);
 });
 
-test('pickPushable: döngüdeki repolar birbirini bekler (boş küme)', () => {
+test('pickPushable: repos in a cycle wait for each other (empty set)', () => {
   const g = graphOf([['a', 'b'], ['b', 'a']]);
   assert.deepEqual(pickPushable([p('a'), p('b')], g), []);
 });
@@ -63,7 +63,7 @@ function info(name, ahead, watched = true) {
   return { path: p(name), label: name, ahead, watched };
 }
 
-test('planRounds: A→B→C turları ve olası commit\'ler', () => {
+test('planRounds: A→B→C rounds and possible commits', () => {
   const g = graphOf([['a', 'b'], ['b', 'c']]);
   const rounds = planRounds([info('a', 2), info('b', 0), info('c', 0)], g);
   assert.deepEqual(
@@ -72,7 +72,7 @@ test('planRounds: A→B→C turları ve olası commit\'ler', () => {
   );
 });
 
-test('planRounds: zaten ahead olan hedef bir kez, kesin olarak push edilir', () => {
+test('planRounds: a target that is already ahead is pushed once, as certain', () => {
   const g = graphOf([['a', 'b'], ['b', 'c']]);
   const rounds = planRounds([info('a', 1), info('b', 1), info('c', 1)], g);
   assert.deepEqual(
@@ -81,7 +81,7 @@ test('planRounds: zaten ahead olan hedef bir kez, kesin olarak push edilir', () 
   );
 });
 
-test('planRounds: push edilecek şey yoksa tur yok; döngüde stuck', () => {
+test('planRounds: no rounds when there is nothing to push; stuck on a cycle', () => {
   const g = graphOf([['a', 'b']]);
   assert.deepEqual(planRounds([info('a', 0), info('b', 0)], g), []);
   const cyc = graphOf([['a', 'b'], ['b', 'a']]);
@@ -89,7 +89,7 @@ test('planRounds: push edilecek şey yoksa tur yok; döngüde stuck', () => {
   assert.deepEqual(names(rounds[0].stuck), ['a', 'b']);
 });
 
-test('discoverRepos: repo olmayan dizinde yalnızca bir alt seviyedeki repoları bulur, node_modules/vendor/dot dizinlerini atlar', () => {
+test('discoverRepos: outside a repo, finds only repos one level down and skips node_modules/vendor/dot directories', () => {
   const { dir, cleanup } = tmpDir('updeps-discover-');
   try {
     const root = fs.realpathSync(dir);
@@ -105,18 +105,18 @@ test('discoverRepos: repo olmayan dizinde yalnızca bir alt seviyedeki repoları
   }
 });
 
-test('discoverRepos: repo içinde o repo ve bulunulan dizinin bir alt seviyesindeki repolar döner', () => {
+test('discoverRepos: inside a repo, returns that repo plus the repos one level below the current directory', () => {
   const { dir, cleanup } = tmpDir('updeps-discover-');
   try {
     const ws = path.join(fs.realpathSync(dir), 'ws');
     for (const rel of ['', 'a', 'b', 'group/deep', 'a/nested']) initGitRepo(path.join(ws, rel));
     fs.mkdirSync(path.join(ws, 'src'));
 
-    // workspace reposu + içindeki proje repoları
+    // workspace repo + the project repos inside it
     assert.deepEqual(discoverRepos(ws), [ws, path.join(ws, 'a'), path.join(ws, 'b')]);
-    // repo alt dizini: kapsayan repo (+ o dizinin hemen altındaki repolar; burada yok)
+    // repo subdirectory: the enclosing repo (+ repos directly below that directory; none here)
     assert.deepEqual(discoverRepos(path.join(ws, 'src')), [ws]);
-    // iç içe repo: üstteki workspace kapsama girmez
+    // nested repo: the workspace above it is not in scope
     assert.deepEqual(discoverRepos(path.join(ws, 'a')), [path.join(ws, 'a'), path.join(ws, 'a', 'nested')]);
   } finally {
     cleanup();

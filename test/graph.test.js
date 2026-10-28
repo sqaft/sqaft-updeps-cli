@@ -9,7 +9,7 @@ function load() {
   );
 }
 
-test('ters indeks hedefi listeleyen tüm kaynakları toplar', async () => {
+test('the reverse index collects every source that lists the target', async () => {
   const cfg = await load();
   const idx = buildReverseIndex(cfg);
   const appPath = cfg.repos.find((r) => r.name === '@globex/sdk').packages[0].path;
@@ -26,7 +26,7 @@ test('ters indeks hedefi listeleyen tüm kaynakları toplar', async () => {
   ]);
 });
 
-test('umbrella-machine dört paket türetir', async () => {
+test('umbrella-machine derives four packages', async () => {
   const cfg = await load();
   const machinePath = cfg.repos
     .find((r) => r.name === '@umbrella/realtime')
@@ -39,7 +39,7 @@ test('umbrella-machine dört paket türetir', async () => {
   ]);
 });
 
-test('döngü tespit edilir', () => {
+test('a cycle is detected', () => {
   const cfg = resolveConfig({
     repos: [
       { path: '~/a', name: 'a', packages: [{ path: '~/b', name: 'b' }] },
@@ -51,7 +51,7 @@ test('döngü tespit edilir', () => {
   assert.ok(cycles[0].includes('a') && cycles[0].includes('b'));
 });
 
-test('örnek grafikte döngü yok', async () => {
+test('the example graph has no cycles', async () => {
   const cfg = await load();
   assert.deepEqual(findCycles(cfg), []);
 });

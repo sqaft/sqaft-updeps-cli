@@ -100,7 +100,7 @@ export async function acquireLock(repoPath, options = {}) {
       try {
         const info = JSON.parse(fs.readFileSync(path.join(lockPath, 'info.json'), 'utf8'));
         if (info.pid && !pidAlive(info.pid)) {
-          logger.warn(`[kilit] Sahibi (pid ${info.pid}) yok, kilit geri alınıyor: ${lockPath}`);
+          logger.warn(`[lock] Owner (pid ${info.pid}) is gone, reclaiming lock: ${lockPath}`);
           fs.rmSync(lockPath, { recursive: true, force: true });
           continue;
         }
@@ -111,7 +111,7 @@ export async function acquireLock(repoPath, options = {}) {
       try {
         const ageSec = (Date.now() - fs.statSync(lockPath).mtimeMs) / 1000;
         if (ageSec >= staleLockSec) {
-          logger.warn(`[kilit] Bayat kilit temizleniyor (${Math.round(ageSec)}s): ${lockPath}`);
+          logger.warn(`[lock] Removing stale lock (${Math.round(ageSec)}s): ${lockPath}`);
           fs.rmSync(lockPath, { recursive: true, force: true });
           continue;
         }
@@ -121,13 +121,13 @@ export async function acquireLock(repoPath, options = {}) {
 
       const elapsed = (Date.now() - start) / 1000;
       if (waitTimeoutSec > 0 && elapsed >= waitTimeoutSec) {
-        throw new Error(`Kilit alınamadı (zaman aşımı ${waitTimeoutSec}s): ${repoPath}`);
+        throw new Error(`Could not acquire lock (timed out after ${waitTimeoutSec}s): ${repoPath}`);
       }
       if (options.signal?.aborted) {
-        throw new Error(`Kilit beklemesi iptal edildi: ${repoPath}`);
+        throw new Error(`Lock wait aborted: ${repoPath}`);
       }
       if (Math.round(elapsed) > 0 && Math.round(elapsed) % 15 === 0) {
-        logger.info(`[kilit] Bekleniyor (${Math.round(elapsed)}s): ${repoPath}`);
+        logger.info(`[lock] Waiting (${Math.round(elapsed)}s): ${repoPath}`);
       }
       await new Promise((r) => setTimeout(r, 1000));
     }
