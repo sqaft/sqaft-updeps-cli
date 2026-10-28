@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { createInterface } from 'node:readline/promises';
 import { styleText } from 'node:util';
 import { DESKTOP_APP_DIR, tildify } from '../paths.js';
@@ -55,7 +56,25 @@ export function installApp() {
   if (res.status !== 0) throw new Error(`npm install ${APP_PACKAGE} failed (exit code ${res.status}).`);
   const app = findApp();
   if (!app) throw new Error(`npm finished, but ${APP_PACKAGE} is not in ${tildify(DESKTOP_APP_DIR)}.`);
+  downloadElectron(app);
   return app;
+}
+
+/**
+ * Electron downloads its binary the first time it is required, not when npm
+ * installs it. Requiring it here makes that download part of the install, so
+ * the first `updeps gui` opens right away and a failed download shows up now.
+ * @param {{ root: string }} app
+ */
+function downloadElectron(app) {
+  let entry;
+  try {
+    entry = createRequire(path.join(app.root, 'package.json')).resolve('electron');
+  } catch {
+    return; // an app version without Electron as a dependency
+  }
+  const res = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(entry)})`], { stdio: 'inherit' });
+  if (res.status !== 0) throw new Error('Downloading Electron failed. Run "updeps gui install" again.');
 }
 
 /**
@@ -83,7 +102,7 @@ async function confirm(question) {
   }
 }
 
-const INSTALL_NOTE = 'It is installed with npm and downloads Electron (about 100 MB).';
+const INSTALL_NOTE = 'It is installed with npm and downloads Electron (about 100 MB, 350 MB on disk).';
 
 /**
  * `updeps gui` opens the desktop app, offering to install it first;
