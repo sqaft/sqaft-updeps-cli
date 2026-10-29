@@ -11,7 +11,6 @@ process.env.XDG_CONFIG_HOME = dir;
 
 const { inspectLauncher, launchPath, findInPath, minNodeMajor, BIN_PATH } = await import('../src/launcher.js');
 const { renderPlist, inspect: inspectAgentPlist } = await import('../src/service/launchd.js');
-const { parsePluginScript, inspectMenubarPlugin } = await import('../src/commands/menubar.js');
 
 test.after(cleanup);
 
@@ -213,82 +212,4 @@ posixTest('inspectLauncher: pinned and PATH-resolved Node', () => {
   const res = inspectLauncher({ node: path.join(goodNodeDir, 'node'), bin: BIN_PATH });
   assert.equal(res.problem, null);
   assert.notEqual(res.node, process.execPath);
-});
-
-test('parsePluginScript: PATH-based form', () => {
-  const script = `#!/usr/bin/env bash
-# <xbar.title>updeps</xbar.title>
-export PATH="/opt/homebrew/bin:/Users/me/Library/Application Support/x:/a\\"b\\$c"
-exec node "/Users/me/lib/updeps/bin/updeps.js" menubar
-`;
-  assert.deepEqual(parsePluginScript(script), {
-    node: 'node',
-    bin: '/Users/me/lib/updeps/bin/updeps.js',
-    path: '/opt/homebrew/bin:/Users/me/Library/Application Support/x:/a"b$c'
-  });
-});
-
-test('parsePluginScript: older absolute-path form', () => {
-  const script = `#!/usr/bin/env bash
-exec "/Users/me/.nvm/versions/node/v22.19.0/bin/node" "/Users/me/lib/updeps/bin/updeps.js" menubar
-`;
-  assert.deepEqual(parsePluginScript(script), {
-    node: '/Users/me/.nvm/versions/node/v22.19.0/bin/node',
-    bin: '/Users/me/lib/updeps/bin/updeps.js',
-    path: null
-  });
-});
-
-test('parsePluginScript: returns null without an exec line', () => {
-  assert.equal(parsePluginScript('#!/usr/bin/env bash\necho hi\n'), null);
-  assert.equal(parsePluginScript(''), null);
-});
-
-test('inspectMenubarPlugin: not installed', () => {
-  const empty = path.join(dir, 'plugins-empty');
-  fs.mkdirSync(empty);
-  assert.equal(inspectMenubarPlugin(empty).installed, false);
-  assert.equal(inspectMenubarPlugin(path.join(dir, 'no-such-dir')).installed, false);
-});
-
-posixTest('inspectMenubarPlugin: PATH-based and older forms', () => {
-  const plugins = path.join(dir, 'plugins');
-  fs.mkdirSync(plugins);
-  const pluginPath = path.join(plugins, 'updeps.30s.sh');
-  const write = (body) => fs.writeFileSync(pluginPath, `#!/usr/bin/env bash\n${body}\n`);
-  const envForm = (pathEnv, bin = BIN_PATH) => write(`export PATH="${pathEnv}"\nexec node "${bin}" menubar`);
-
-  envForm(`${emptyDir}:${goodNodeDir}`);
-  let res = inspectMenubarPlugin(plugins);
-  assert.equal(res.installed, true);
-  assert.equal(res.path, pluginPath);
-  assert.equal(res.node, path.join(goodNodeDir, 'node'));
-  assert.equal(res.nodeVersion, 'v22.3.0');
-  assert.equal(res.problem, null);
-
-  envForm(emptyDir);
-  assert.equal(inspectMenubarPlugin(plugins).problem, 'node-missing');
-
-  envForm(oldNodeDir);
-  assert.equal(inspectMenubarPlugin(plugins).problem, 'node-too-old');
-
-  envForm(goodNodeDir, path.join(dir, 'gone', 'updeps.js'));
-  assert.equal(inspectMenubarPlugin(plugins).problem, 'bin-missing');
-
-  envForm(goodNodeDir, otherFile);
-  assert.equal(inspectMenubarPlugin(plugins).problem, 'different-install');
-
-  write(`exec "${path.join(goodNodeDir, 'node')}" "${BIN_PATH}" menubar`);
-  res = inspectMenubarPlugin(plugins);
-  assert.equal(res.node, path.join(goodNodeDir, 'node'));
-  assert.equal(res.problem, null);
-
-  write(`exec "${path.join(dir, 'gone', 'node')}" "${BIN_PATH}" menubar`);
-  assert.equal(inspectMenubarPlugin(plugins).problem, 'node-missing');
-
-  write('echo hi');
-  res = inspectMenubarPlugin(plugins);
-  assert.equal(res.installed, true);
-  assert.equal(res.node, null);
-  assert.equal(res.problem, null);
 });

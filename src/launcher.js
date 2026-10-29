@@ -20,7 +20,7 @@ export const DEFAULT_SERVICE_PATH =
       : '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
 /**
- * PATH the background service and the menubar plugin run `node` with: the given PATH
+ * PATH the background service runs `node` with: the given PATH
  * (deduplicated, in order) plus the directory of the running Node binary appended
  * when it is not already on it, so a `node` is found even when started from a minimal environment.
  * @param {string} [basePath]
@@ -102,7 +102,7 @@ function nodeVersionOf(nodeBin) {
  */
 
 /**
- * Checks what a launcher (background service or menubar plugin) will run: the Node binary and the CLI entry point.
+ * Checks what a background service launcher will run: the Node binary and the CLI entry point.
  * `node` is either a bare name, looked up in `pathEnv` the way `env` does, or an absolute path (older launchers).
  * - `node-missing`: no `node` on the PATH, or the pinned binary is gone.
  * - `node-too-old`: the resolved Node is below the minimum in package.json `engines.node`.

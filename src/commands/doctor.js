@@ -10,7 +10,6 @@ import { findCycles } from '../graph.js';
 import { runningDaemonPid, daemonCodeStale } from '../daemon.js';
 import { minNodeMajor } from '../launcher.js';
 import { serviceBackend } from '../service/index.js';
-import { inspectMenubarPlugin } from './menubar.js';
 
 const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
 const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
@@ -48,7 +47,7 @@ function bad(msg) {
 }
 
 /**
- * Reports one launcher (service or menubar plugin): the Node it will run and any problem with it or the CLI.
+ * Reports the service's launcher: the Node it will run and any problem with it or the CLI.
  * @param {string} label
  * @param {import('../service/index.js').ServiceInspection} launcher
  * @param {string} restartCommand command that regenerates the launcher with the current PATH
@@ -99,13 +98,6 @@ function checkService() {
         );
       }
     }
-  }
-
-  if (process.platform !== 'darwin') return;
-  const plugin = inspectMenubarPlugin();
-  if (plugin.installed) {
-    if (plugin.problem || plugin.node) reportLauncher('menubar plugin', plugin, 'updeps menubar --install');
-    else warn(`menubar plugin: cannot read the exec line of ${tildify(plugin.path)} — run "updeps menubar --install"`);
   }
 }
 

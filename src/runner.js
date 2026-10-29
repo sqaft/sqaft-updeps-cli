@@ -19,7 +19,7 @@ import {
 import { loadState, updateState } from './state.js';
 import { appendEvent } from './journal.js';
 import { redact } from './redact.js';
-import { sendNotification, refreshMenubar } from './notify.js';
+import { sendNotification } from './notify.js';
 
 /**
  * @typedef {object} TriggerContext
@@ -296,7 +296,6 @@ export async function runTarget({
     };
     return state;
   });
-  refreshMenubar();
 
   try {
     const pre = checkPreconditions(target.path);
@@ -482,7 +481,6 @@ export async function runTarget({
       }
       return state;
     });
-    refreshMenubar();
   }
 }
 

@@ -347,8 +347,7 @@ the remote is ahead, the push is rejected and the command stops.
 | `updeps doctor` | System health check |
 | `updeps start` · `stop` · `restart` | Background service control (see "Background service"). `stop` stops the daemon until the next login |
 | `updeps gui [install \| uninstall]` | Opens the desktop app (see "Desktop app"); `install` installs or updates it, `uninstall` removes it |
-| `updeps menubar [--install]` | SwiftBar / xbar menu bar plugin (macOS) |
-| `updeps reset [--yes] [--keep-daemon]` | Deletes all data **except** the config: queue, open failures, history (journal), raw logs, processed-SHA tracking, locks. If the daemon is running it is restarted to also clear the in-memory queue (skipped with `--keep-daemon`). `--yes` skips the confirmation. The **Maintenance › Clear data** button in the menu bar does the same. |
+| `updeps reset [--yes] [--keep-daemon]` | Deletes all data **except** the config: queue, open failures, history (journal), raw logs, processed-SHA tracking, locks. If the daemon is running it is restarted to also clear the in-memory queue (skipped with `--keep-daemon`). `--yes` skips the confirmation. The **Clear run data…** item in the desktop app's tray menu does the same. |
 
 ---
 
@@ -437,9 +436,8 @@ see it in three places:
 
 Open failures are kept persistently in `state.json`; when that target next runs
 successfully or with no changes (from the daemon or via `updeps retry --failed`),
-the failure is cleared automatically. The menu bar (SwiftBar/xbar on macOS) and the
-desktop app's tray icon show `⚠N` (failures) and `⧗N` (running + queued jobs)
-badges and a clickable list of failures.
+the failure is cleared automatically. The desktop app's tray icon shows the open
+failures and the running and queued jobs, with a clickable list of failures.
 
 Notifications go through `terminal-notifier` (or `osascript`) on macOS,
 `notify-send` (libnotify) on Linux, and a PowerShell toast on Windows. Set
@@ -466,19 +464,17 @@ platform. The service definitions are listed under "Background service".
 
 ### Node version managers and reinstalls
 
-The background service (see "Background service") and the SwiftBar/xbar plugin
-run `node` through the PATH saved at `updeps start` and `updeps menubar --install`
-(your PATH at that moment, plus the directory of the Node running the CLI). They
-do not pin a Node binary, so Homebrew upgrades and switching between installed
-Node versions keep working.
+The background service (see "Background service") runs `node` through the PATH
+saved at `updeps start` (your PATH at that moment, plus the directory of the Node
+running the CLI). It does not pin a Node binary, so Homebrew upgrades and
+switching between installed Node versions keep working.
 
 It still breaks when no supported Node (see `engines` in `package.json`) remains on
 that PATH, or when the package itself was installed inside a Node version that has
 been removed (nvm keeps global packages per version). Reinstall the package, then
-run `updeps restart` (and `updeps menubar --install` for the plugin). After
-switching versions, `updeps restart` also refreshes the saved PATH.
-`updeps doctor` and `updeps status` report a missing or too old Node and a missing
-CLI, and the menu bar shows it too.
+run `updeps restart`. After switching versions, `updeps restart` also refreshes
+the saved PATH. `updeps doctor` and `updeps status` report a missing or too old
+Node and a missing CLI, and the desktop app's tray menu shows it too.
 
 After upgrading the package, the running daemon is still on the old code until it
 is restarted. `updeps status` (and `updeps doctor`) warn when the installed code

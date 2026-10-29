@@ -24,7 +24,6 @@ COMMANDS
   doctor                          System health check
   start | stop | restart          Control the background service (daemon)
   gui [install | uninstall]       Desktop app: dependency graph editor + system tray
-  menubar [--install]             SwiftBar/xbar plugin (macOS)
   reset [--yes] [--keep-daemon]   Delete all data except the config (queue + failures)
 
 GLOBAL OPTIONS
@@ -59,7 +58,6 @@ const COMMAND_OPTIONS = {
     lines: { type: 'string', short: 'n' }
   },
   logs: { follow: { type: 'boolean', short: 'f' }, lines: { type: 'string', short: 'n' } },
-  menubar: { install: { type: 'boolean' } },
   reset: { yes: { type: 'boolean', short: 'y' }, 'keep-daemon': { type: 'boolean' } },
   daemon: { supervise: { type: 'boolean' }, detach: { type: 'boolean' } }
 };
@@ -129,8 +127,6 @@ async function main() {
       return (await import('../src/commands/daemonctl.js')).cmdRestart();
     case 'gui':
       return (await import('../src/commands/gui.js')).cmdGui(positionals);
-    case 'menubar':
-      return (await import('../src/commands/menubar.js')).cmdMenubar(values);
     case 'reset':
       return (await import('../src/commands/reset.js')).cmdReset(values);
     case 'daemon': {

@@ -3,22 +3,19 @@ import { logger } from './logger.js';
 import { redact } from './redact.js';
 
 /**
- * Fire-and-forget spawn for a best-effort side effect (notification, SwiftBar
- * refresh). The executable not existing surfaces as an *async* 'error' event
+ * Fire-and-forget spawn for a best-effort side effect (a notification). The executable not existing surfaces as an *async* 'error' event
  * on the child, not a thrown exception — an unhandled one crashes the whole
  * process. Swallow it here so a missing notifier never takes the daemon down.
  * On Windows `detached` would give the child a console of its own, so it is
  * only used elsewhere; `windowsHide` keeps PowerShell from opening a window.
  * @param {string} cmd
  * @param {string[]} args
- * @param {object} [opts]
  */
-function spawnDetached(cmd, args, opts = {}) {
+function spawnDetached(cmd, args) {
   const child = spawn(cmd, args, {
     stdio: 'ignore',
     detached: process.platform !== 'win32',
-    windowsHide: true,
-    ...opts
+    windowsHide: true
   });
   child.on('error', () => {
     /* best-effort: missing binary, permission issue, etc. */
@@ -138,16 +135,4 @@ export function sendNotification({ type, title, message, enabled = true }) {
  */
 function asString(s) {
   return '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
-}
-
-/**
- * Asks SwiftBar to refresh the updeps plugin, if SwiftBar is around (macOS only).
- */
-export function refreshMenubar() {
-  if (process.platform !== 'darwin') return;
-  try {
-    spawnDetached('open', ['-g', 'swiftbar://refreshplugin?name=updeps'], { detached: false });
-  } catch {
-    /* ignore */
-  }
 }

@@ -11,7 +11,7 @@ The desktop app (dependency graph editor + system tray) lives in the `sqaft-upde
 
 - `src/service/`: how the daemon is kept running per platform: `launchd.js` (macOS), `systemd.js` (Linux), `startup.js` (Windows Startup-folder script), `supervised.js` (the `updeps daemon --supervise` supervisor used on Windows and on Linux without systemd); `index.js` picks one.
 - `src/control.js`: the daemon's control channel (Unix socket / named pipe), used to stop a supervised daemon.
-- `src/launcher.js`: Node/CLI lookup shared by the service definitions and the menubar plugin.
+- `src/launcher.js`: Node/CLI lookup shared by the service definitions.
 - `src/commands/gui.js`: `updeps gui`; installs `@sqaft/updeps-app` with npm into `DESKTOP_APP_DIR` (`src/paths.js`), runs its `bin/updeps-app.js --prepare` (Electron download, macOS bundle), and starts it with `UPDEPS_CLI` set to this package. Needs `@sqaft/updeps-app` 0.0.2 or newer (`--prepare`).
 
 ## Commands
@@ -39,4 +39,3 @@ Breaking changes to the config format, the state/journal files, CLI commands and
 - The tool runs **live** on this machine: the global `updeps` is `npm link`ed to this working copy and the launchd daemon runs it. It executes commands in real repos, so do not break the installed daemon or the real config (`reset`, `remove`, `stop`, `run`); test with `--dry-run` and the test fixtures. After code changes, run `updeps restart` so the daemon picks them up.
 - Platform-specific code goes behind `process.platform` checks with the macOS behavior unchanged; never assume `/`, `:` (use `path.sep`, `path.delimiter`), signals (Windows has none a process can handle), process groups, or a POSIX shell.
 - If CLI commands or options change, update `--help` and `README.md` too.
-- The SwiftBar/xbar plugin renders the output of `updeps menubar`; check it when that output changes.
