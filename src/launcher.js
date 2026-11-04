@@ -41,7 +41,7 @@ export function launchPath(basePath = process.env.PATH, nodeDir = path.dirname(p
  * @param {string} p
  * @returns {string}
  */
-function realPathOr(p) {
+export function realPathOr(p) {
   try {
     return process.platform === 'win32' ? fs.realpathSync.native(p) : fs.realpathSync(p);
   } catch {

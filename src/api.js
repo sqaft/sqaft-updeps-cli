@@ -33,8 +33,9 @@ import { redact } from './redact.js';
 import { BIN_PATH } from './launcher.js';
 import { runningDaemonPid, daemonCodeStale } from './daemon.js';
 import { serviceBackend } from './service/index.js';
+import { checkUpdates, isNewer } from './updates.js';
 
-export const API_VERSION = 1;
+export const API_VERSION = 2;
 
 /** Version of this install, from package.json. */
 export const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -49,7 +50,7 @@ export const paths = Object.freeze({
   logFile: LOG_FILE
 });
 
-export { BIN_PATH, ConfigError, DEFAULT_COMMIT_PATHS, DEFAULT_VALUES, VALID_DIRTY_POLICIES, VALID_TRIGGERS };
+export { BIN_PATH, checkUpdates, isNewer, ConfigError, DEFAULT_COMMIT_PATHS, DEFAULT_VALUES, VALID_DIRTY_POLICIES, VALID_TRIGGERS };
 
 /**
  * Resolves a path as the config does (`~/...` expanded, made absolute). Two

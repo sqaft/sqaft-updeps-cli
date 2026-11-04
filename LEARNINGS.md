@@ -26,3 +26,12 @@ Under a temp `XDG_STATE_HOME` (`/private/var/folders/.../T/...`) the state direc
 
 ## 2026-10-28 — On Windows `fs.realpathSync` keeps 8.3 short names, git does not
 `os.tmpdir()` on a GitHub Windows runner is `C:\Users\RUNNER~1\...`; `fs.realpathSync` keeps the short name while `git rev-parse --show-toplevel` and `fs.realpathSync.native` return `C:\Users\runneradmin\...`, so one repo showed up under two paths. Paths that are compared with git's use `fs.realpathSync.native` on Windows.
+
+## 2026-11-04 — A CLI that updates itself must prove it is the global npm install
+`npm link` makes the global package a symlink to the working copy, and the daemon runs that copy, so `npm install -g` would replace the link and move the daemon off the code under development. The same happens with an `npm` that belongs to another Node (nvm): it would install into its own prefix and leave the running copy untouched. So the offer is made only when the package directory is inside `node_modules`, is not a git checkout, and is the real directory (not a link) at `<npm root -g>/@sqaft/updeps-cli`.
+
+## 2026-11-04 — Restarting the daemon aborts the run in progress
+`stopService` makes the daemon abort and wait for the in-flight command and clears the queue. After a CLI update the daemon is therefore restarted only when `activeRun` is empty and the queue is empty; otherwise the user is told to run `updeps restart` later.
+
+## 2026-11-04 — A self-update has to import everything before npm replaces the files
+`npm install -g` rewrites the package while the old process is still running, so a lazy `import()` afterwards would load new files into the old process. The notices module imports all it needs up front, and the daemon restart runs the new code as a separate process.

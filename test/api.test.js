@@ -16,7 +16,7 @@ const { saveState, loadState } = await import('../src/state.js');
 test.after(cleanup);
 
 test('the package exports the API at @sqaft/updeps-cli/api', () => {
-  assert.equal(api.API_VERSION, 1);
+  assert.equal(api.API_VERSION, 2);
   assert.match(api.VERSION, /^\d+\.\d+\.\d+/);
   assert.equal(api.paths.configFile, path.join(dir, 'config', 'sqaft-updeps', 'config.json'));
   assert.ok(fs.existsSync(api.BIN_PATH));

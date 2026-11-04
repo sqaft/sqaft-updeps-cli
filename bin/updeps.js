@@ -30,6 +30,9 @@ GLOBAL OPTIONS
   -h, --help                      Show this help
   -v, --version                   Show the version
   --verbose                       Verbose logging
+
+ENVIRONMENT
+  UPDEPS_NO_NOTICES=1             No update checks and no desktop app tip
 `;
 
 const GLOBAL_OPTIONS = {
@@ -92,6 +95,17 @@ async function main() {
   }
   if (values.verbose) setLevel('debug');
 
+  await dispatch(command, values, positionals);
+  await showNotices(command, values);
+}
+
+/**
+ * Runs the command.
+ * @param {string} command
+ * @param {Record<string, any>} values  parsed options
+ * @param {string[]} positionals
+ */
+async function dispatch(command, values, positionals) {
   switch (command) {
     case 'init':
       return (await import('../src/commands/init.js')).cmdInit(values);
@@ -139,6 +153,23 @@ async function main() {
       console.error(styleText('red', `Unknown command: ${command}`));
       console.log(USAGE);
       process.exit(1);
+  }
+}
+
+/**
+ * After a command succeeded in a terminal: the desktop app tip and the CLI
+ * update offer (src/notices.js, which decides whether they apply). A failure
+ * here never changes the command's outcome or exit code; scripted runs do not
+ * even load the module.
+ * @param {string} command
+ * @param {Record<string, any>} values
+ */
+async function showNotices(command, values) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return;
+  try {
+    await (await import('../src/notices.js')).afterCommand(command, values);
+  } catch {
+    /* notices are best effort */
   }
 }
 

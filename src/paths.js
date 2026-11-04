@@ -60,6 +60,9 @@ export const LOG_FILE = path.join(LOGS_DIR, 'updeps.log');
 export const PID_FILE = path.join(STATE_DIR, 'daemon.pid');
 export const SUPERVISOR_PID_FILE = path.join(STATE_DIR, 'supervisor.pid');
 
+/** Cache of the latest published versions and the update-prompt snooze (see `src/updates.js`). */
+export const UPDATES_FILE = path.join(STATE_DIR, 'updates.json');
+
 /** Where `updeps gui install` installs the desktop app (an npm prefix of its own). */
 export const DESKTOP_APP_DIR = path.join(dataBase, APP_ID, 'gui');
 

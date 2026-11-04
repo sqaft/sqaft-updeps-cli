@@ -47,7 +47,8 @@ Requires macOS, Linux or Windows, git, and Node.js 22+. This installs the
 `updeps` and `sqaft-updeps` commands.
 
 For a graphical view (dependency graph editor, status and failures in the system
-tray), run `updeps gui`; see "Desktop app".
+tray), run `updeps gui`; see "Desktop app". Interactive commands check for new
+versions of updeps and the app now and then; see "Update checks".
 
 ---
 
@@ -346,7 +347,7 @@ the remote is ahead, the push is rejected and the command stops.
 | `updeps logs [-f] [-n N]` | Raw log |
 | `updeps doctor` | System health check |
 | `updeps start` · `stop` · `restart` | Background service control (see "Background service"). `stop` stops the daemon until the next login |
-| `updeps gui [install \| uninstall]` | Opens the desktop app (see "Desktop app"); `install` installs or updates it, `uninstall` removes it |
+| `updeps gui [install \| uninstall]` | Opens the desktop app (see "Desktop app"), offering to update it first when a newer version is published; `install` installs or updates it, `uninstall` removes it |
 | `updeps reset [--yes] [--keep-daemon]` | Deletes all data **except** the config: queue, open failures, history (journal), raw logs, processed-SHA tracking, locks. If the daemon is running it is restarted to also clear the in-memory queue (skipped with `--keep-daemon`). `--yes` skips the confirmation. The **Clear run data…** item in the desktop app's tray menu does the same. |
 
 ---
@@ -389,8 +390,8 @@ failures in the system tray (macOS, Linux, Windows). The first time, it offers
 to install the app; outside a terminal it only says how to install it.
 
 ```bash
-updeps gui            # opens the app; offers to install it if it is missing
-updeps gui install    # installs or updates it
+updeps gui            # opens the app; offers to install it if it is missing, to update it if it is outdated
+updeps gui install    # installs or updates it ("up to date" when it already is)
 updeps gui uninstall  # removes it
 ```
 
@@ -400,6 +401,50 @@ Windows; `XDG_DATA_HOME` is honored), so nothing is installed globally. It
 downloads Electron during the install (about 100 MB, 350 MB on disk), and on
 macOS prepares the app to show up as "updeps" in the Dock. The app works with
 the CLI install that opened it, through the API below.
+
+**Updates.** In a terminal, `updeps gui` looks up the latest published version of
+the app each time and, when it is newer than the installed one, asks
+`Update now? [Y/n]` before opening it (the question is asked every time, there is
+no snooze). Updating closes the running app: it is asked to quit (`updeps-gui --quit`),
+then the new version is installed. If the running app is a version that does not
+know `--quit`, the update still goes ahead and you are told to quit the app from the
+tray and run `updeps gui` again. If the update fails, the error is printed and the
+installed app is opened anyway. Outside a terminal the check is skipped and the app
+just opens.
+
+While the app is not installed, interactive commands end with a one-line tip about
+it (`updeps gui install`).
+
+---
+
+## Update checks
+
+Two things happen after an interactive `updeps` command succeeds, and only when
+stdin, stdout and stderr are all terminals:
+
+- **Desktop app tip.** While the desktop app is not installed, one dim line
+  points to `updeps gui install`. It is shown after every such command.
+- **CLI update offer.** When a newer `@sqaft/updeps-cli` is published and this is a
+  global npm install (`npm install -g`) that can update itself, you are asked
+  `Update now? [Y/n]`. Yes runs `npm install -g @sqaft/updeps-cli@latest`; if the
+  daemon is running and idle it is restarted on the new version, and if it is
+  working on an update, you are told to run `updeps restart` when it finishes.
+  No hides the prompt for that version for 24 hours and prints the manual command.
+  A linked working copy (`npm link`), a git checkout, or an npm that installs
+  somewhere else than this install never gets the offer.
+
+Everything is printed to stderr. Nothing is printed or asked for the daemon,
+`--json`, `--watch` and `--follow` output, scripts, pipes, or the desktop app's own
+calls to the CLI.
+
+The only server contacted is the npm registry (`registry.npmjs.org`), for the
+`latest` version of `@sqaft/updeps-cli` and `@sqaft/updeps-gui`; no other data is sent.
+The answers are cached for 24 hours (an hour after a failed lookup, such as when
+offline) in `updates.json` in the state directory, which also remembers the
+snooze. A lookup waits at most 1.5 seconds.
+
+Set `UPDEPS_NO_NOTICES=1` to turn all of this off: no request is made, nothing is
+printed. `updeps gui` then also skips its update check.
 
 ---
 
@@ -454,6 +499,7 @@ Notifications go through `terminal-notifier` (or `osascript`) on macOS,
 <config>/config.json          definitions (you edit this)
 <state>/state.json            runtime state, open failures
 <state>/journal.jsonl         persistent operation journal
+<state>/updates.json          latest published versions and update-prompt snooze (see "Update checks"; `reset` keeps it)
 <state>/locks/                target repo locks
 <state>/logs/updeps.log       raw log (rotated at 5MB)
 <state>/daemon.sock           control channel (macOS, Linux; a named pipe on Windows)
@@ -500,11 +546,16 @@ updeps.inspectService();                        // how the daemon is installed a
 updeps.readHistory({ failed: true, since: '3d' });
 updeps.readRun('acme-worker');                  // one run in full, like `updeps show`
 updeps.readLog({ lines: 200 });
+await updeps.checkUpdates();                    // { cli: { current, latest, update, command }, app: { latest } }
+updeps.isNewer('0.3.0', '0.2.0');               // true
 ```
 
 `paths` lists the files (config, state, journal, log), so a caller can watch them
 for changes; `resolvePath` and `displayPath` convert between `~/...` and absolute
-paths the way the config does. Updates and daemon control (`run`, `retry`, `start`, `stop`, `reset`)
+paths the way the config does. `checkUpdates` returns the latest published
+versions of the CLI and the desktop app (cached, never throws; `force: true` skips
+the cache; see "Update checks"), `cli.update` telling whether this install can
+update itself. Updates and daemon control (`run`, `retry`, `start`, `stop`, `reset`)
 are not part of the API: run the CLI at `BIN_PATH` for them. Breaking changes to
 the API follow semver; `API_VERSION` goes up when something a caller may need to
 check for changes.
@@ -534,7 +585,10 @@ npm test            # node:test, no extra dependencies
 ```
 
 `UPDEPS_GUI=<path to a sqaft-updeps-gui checkout> updeps gui` opens that checkout
-instead of the installed desktop app.
+instead of the installed desktop app. `UPDEPS_REGISTRY=<url>` replaces the npm
+registry the update checks ask (default `https://registry.npmjs.org`; it must answer
+`GET /-/package/<name>/dist-tags`, as the tests' local server does). The tests set
+`UPDEPS_NO_NOTICES=1` (`test/setup.js`) so none of them touches the network.
 
 CI runs the tests on macOS, Linux and Windows. Publishing happens from CI: when
 the `version` in `package.json` is not on npm yet, the `publish` job in

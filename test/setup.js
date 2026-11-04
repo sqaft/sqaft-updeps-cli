@@ -8,6 +8,10 @@
 // variables themselves before importing src modules; this is the safety net for
 // all the others.
 //
+// UPDEPS_NO_NOTICES=1 turns off the update checks and the desktop app tip, so
+// no test makes a network request to the npm registry. Tests of those paths
+// delete it locally and point UPDEPS_REGISTRY at a local server.
+//
 // It also turns off git's line-ending conversion for the throwaway repos the
 // tests create (Git for Windows enables `core.autocrlf` system-wide), so file
 // contents read back from the working tree match what the tests wrote.
@@ -20,6 +24,7 @@ process.env.XDG_CONFIG_HOME = path.join(root, 'config');
 process.env.XDG_STATE_HOME = path.join(root, 'state');
 process.env.XDG_DATA_HOME = path.join(root, 'data');
 delete process.env.UPDEPS_GUI;
+process.env.UPDEPS_NO_NOTICES = '1';
 
 const gitConfigCount = parseInt(process.env.GIT_CONFIG_COUNT || '0', 10) || 0;
 process.env[`GIT_CONFIG_KEY_${gitConfigCount}`] = 'core.autocrlf';

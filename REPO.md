@@ -12,11 +12,13 @@ The desktop app (dependency graph editor + system tray) lives in the `sqaft-upde
 - `src/service/`: how the daemon is kept running per platform: `launchd.js` (macOS), `systemd.js` (Linux), `startup.js` (Windows Startup-folder script), `supervised.js` (the `updeps daemon --supervise` supervisor used on Windows and on Linux without systemd); `index.js` picks one.
 - `src/control.js`: the daemon's control channel (Unix socket / named pipe), used to stop a supervised daemon.
 - `src/launcher.js`: Node/CLI lookup shared by the service definitions.
-- `src/commands/gui.js`: `updeps gui`; installs `@sqaft/updeps-gui` with npm into `DESKTOP_APP_DIR` (`src/paths.js`), runs its `bin/updeps-gui.js --prepare` (Electron download, macOS bundle), and starts it with `UPDEPS_CLI` set to this package.
+- `src/commands/gui.js`: `updeps gui`; installs `@sqaft/updeps-gui` with npm into `DESKTOP_APP_DIR` (`src/paths.js`), runs its `bin/updeps-gui.js --prepare` (Electron download, macOS bundle), and starts it with `UPDEPS_CLI` set to this package. Before opening it offers an update when a newer version is published; an update first asks a running app to quit with `updeps-gui --quit`.
+- `src/updates.js`: latest versions of the CLI and the app from the npm registry's dist-tags (`UPDEPS_REGISTRY`), cached in `UPDATES_FILE` (`src/paths.js`) together with the update-prompt snooze; `isNewer`, `checkUpdates`, `canSelfUpdate` (only a real global npm install may update itself). `UPDEPS_NO_NOTICES` turns it off.
+- `src/notices.js`: what `bin/updeps.js` prints after a successful interactive command: the desktop app tip and the CLI update offer. Loaded only for a terminal; `src/prompt.js` has the shared yes/no question.
 
 ## Commands
 
-- `npm test` — `node --test --test-force-exit --import ./test/setup.js "test/*.test.js"` (`test/setup.js` points XDG_CONFIG_HOME / XDG_STATE_HOME at a temp dir so tests never touch the real config/state, and turns off `core.autocrlf` for the test repos)
+- `npm test` — `node --test --test-force-exit --import ./test/setup.js "test/*.test.js"` (`test/setup.js` points XDG_CONFIG_HOME / XDG_STATE_HOME at a temp dir so tests never touch the real config/state, sets `UPDEPS_NO_NOTICES=1` so no test reaches the npm registry, and turns off `core.autocrlf` for the test repos)
 - Linux tests locally: `docker run --rm -v "$PWD":/src:ro node:22-bookworm bash -c 'cp -r /src /app && cd /app && rm -rf node_modules && npm ci && npm test'`. Windows is covered by the CI matrix (`.github/workflows/test.yml`). Test commands in POSIX syntax run through `TEST_SHELL` (`test/helpers.js`: Git for Windows' bash on Windows).
 - `npm start` — runs the daemon in the foreground
 
