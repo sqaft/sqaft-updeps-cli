@@ -19,7 +19,7 @@ const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'updeps-xdg-'
 process.env.XDG_CONFIG_HOME = path.join(root, 'config');
 process.env.XDG_STATE_HOME = path.join(root, 'state');
 process.env.XDG_DATA_HOME = path.join(root, 'data');
-delete process.env.UPDEPS_APP;
+delete process.env.UPDEPS_GUI;
 
 const gitConfigCount = parseInt(process.env.GIT_CONFIG_COUNT || '0', 10) || 0;
 process.env[`GIT_CONFIG_KEY_${gitConfigCount}`] = 'core.autocrlf';

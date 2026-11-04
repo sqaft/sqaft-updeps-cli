@@ -5,14 +5,14 @@
 
 A language- and package-manager-agnostic CLI and background service for macOS, Linux and Windows that, when a package is pushed, updates the repos that depend on it. Published on npm as `@sqaft/updeps-cli`; public repo: github.com/sqaft/sqaft-updeps-cli. Details: `README.md`, `updeps --help`.
 
-The desktop app (dependency graph editor + system tray) lives in the `sqaft-updeps-app` repo (`@sqaft/updeps-app` on npm). It uses this package through `@sqaft/updeps-cli/api` (`src/api.js`) and runs the CLI for actions, so changes to the API, the CLI commands it runs, or the state/journal format must be checked against it.
+The desktop app (dependency graph editor + system tray) lives in the `sqaft-updeps-gui` repo (`@sqaft/updeps-gui` on npm). It uses this package through `@sqaft/updeps-cli/api` (`src/api.js`) and runs the CLI for actions, so changes to the API, the CLI commands it runs, or the state/journal format must be checked against it.
 
 ## Layout
 
 - `src/service/`: how the daemon is kept running per platform: `launchd.js` (macOS), `systemd.js` (Linux), `startup.js` (Windows Startup-folder script), `supervised.js` (the `updeps daemon --supervise` supervisor used on Windows and on Linux without systemd); `index.js` picks one.
 - `src/control.js`: the daemon's control channel (Unix socket / named pipe), used to stop a supervised daemon.
 - `src/launcher.js`: Node/CLI lookup shared by the service definitions.
-- `src/commands/gui.js`: `updeps gui`; installs `@sqaft/updeps-app` with npm into `DESKTOP_APP_DIR` (`src/paths.js`), runs its `bin/updeps-app.js --prepare` (Electron download, macOS bundle), and starts it with `UPDEPS_CLI` set to this package. Needs `@sqaft/updeps-app` 0.0.2 or newer (`--prepare`).
+- `src/commands/gui.js`: `updeps gui`; installs `@sqaft/updeps-gui` with npm into `DESKTOP_APP_DIR` (`src/paths.js`), runs its `bin/updeps-gui.js --prepare` (Electron download, macOS bundle), and starts it with `UPDEPS_CLI` set to this package.
 
 ## Commands
 

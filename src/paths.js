@@ -61,7 +61,7 @@ export const PID_FILE = path.join(STATE_DIR, 'daemon.pid');
 export const SUPERVISOR_PID_FILE = path.join(STATE_DIR, 'supervisor.pid');
 
 /** Where `updeps gui install` installs the desktop app (an npm prefix of its own). */
-export const DESKTOP_APP_DIR = path.join(dataBase, APP_ID, 'app');
+export const DESKTOP_APP_DIR = path.join(dataBase, APP_ID, 'gui');
 
 /** Short, stable id of this state directory, so separate installs/test runs never share a socket name. */
 const stateDirId = crypto.createHash('sha256').update(STATE_DIR).digest('hex').slice(0, 12);

@@ -383,7 +383,7 @@ supervised daemon down cleanly, since Windows has no signal a process can handle
 ## Desktop app
 
 `updeps gui` opens the desktop app
-([`@sqaft/updeps-app`](https://github.com/sqaft/sqaft-updeps-app)): the
+([`@sqaft/updeps-gui`](https://github.com/sqaft/sqaft-updeps-gui)): the
 dependency graph to view and edit, and the daemon's state, queue and open
 failures in the system tray (macOS, Linux, Windows). The first time, it offers
 to install the app; outside a terminal it only says how to install it.
@@ -395,7 +395,7 @@ updeps gui uninstall  # removes it
 ```
 
 The app is installed with npm into its own directory,
-`~/.local/share/sqaft-updeps/app` (`%LOCALAPPDATA%\sqaft-updeps\app` on
+`~/.local/share/sqaft-updeps/gui` (`%LOCALAPPDATA%\sqaft-updeps\gui` on
 Windows; `XDG_DATA_HOME` is honored), so nothing is installed globally. It
 downloads Electron during the install (about 100 MB, 350 MB on disk), and on
 macOS prepares the app to show up as "updeps" in the Dock. The app works with
@@ -533,7 +533,7 @@ npm link            # installs the updeps and sqaft-updeps commands
 npm test            # node:test, no extra dependencies
 ```
 
-`UPDEPS_APP=<path to a sqaft-updeps-app checkout> updeps gui` opens that checkout
+`UPDEPS_GUI=<path to a sqaft-updeps-gui checkout> updeps gui` opens that checkout
 instead of the installed desktop app.
 
 CI runs the tests on macOS, Linux and Windows. Publishing happens from CI: when

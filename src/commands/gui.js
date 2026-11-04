@@ -7,25 +7,25 @@ import { DESKTOP_APP_DIR, tildify } from '../paths.js';
 import { BIN_PATH } from '../launcher.js';
 
 /** The desktop app's npm package. */
-export const APP_PACKAGE = '@sqaft/updeps-app';
+export const APP_PACKAGE = '@sqaft/updeps-gui';
 
 /** This CLI's package directory; the app is told to work with it. */
 const CLI_ROOT = path.dirname(path.dirname(BIN_PATH));
 
 /**
- * The desktop app this CLI opens: the checkout in `UPDEPS_APP` when set (for
+ * The desktop app this CLI opens: the checkout in `UPDEPS_GUI` when set (for
  * development), otherwise the one `updeps gui install` put in DESKTOP_APP_DIR.
  * @returns {{ root: string, version: string, bin: string } | null} null when it is not installed
  */
 export function findApp() {
-  const root = process.env.UPDEPS_APP || path.join(DESKTOP_APP_DIR, 'node_modules', ...APP_PACKAGE.split('/'));
+  const root = process.env.UPDEPS_GUI || path.join(DESKTOP_APP_DIR, 'node_modules', ...APP_PACKAGE.split('/'));
   let pkg;
   try {
     pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   } catch {
     return null;
   }
-  const rel = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.['updeps-app'];
+  const rel = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.['updeps-gui'];
   if (pkg.name !== APP_PACKAGE || typeof rel !== 'string') return null;
   const bin = path.join(root, rel);
   return fs.existsSync(bin) ? { root, version: pkg.version, bin } : null;
@@ -60,7 +60,7 @@ export function installApp() {
 }
 
 /**
- * Runs the app's own setup (`updeps-app --prepare`): Electron downloads its
+ * Runs the app's own setup (`updeps-gui --prepare`): Electron downloads its
  * binary the first time it is required, not when npm installs it, and on
  * macOS the app builds its updeps.app bundle. Doing that during the install
  * makes the first `updeps gui` open right away and reports a failure now.
