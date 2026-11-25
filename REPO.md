@@ -1,6 +1,6 @@
 # @sqaft/updeps-cli
 
-**Durum:** Yayında  
+**Durum:** Geliştirme aşamasında  
 **Tür:** Bağımsız kütüphane / ürün
 
 A language- and package-manager-agnostic CLI and background service for macOS, Linux and Windows that, when a package is pushed, updates the repos that depend on it. Published on npm as `@sqaft/updeps-cli`; public repo: github.com/sqaft/sqaft-updeps-cli. Details: `README.md`, `updeps --help`.
